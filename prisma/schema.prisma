@@ -1,0 +1,373 @@
+// GlobalCorp Hub — data model
+//
+// A User owns Companies. Each Company moves through a formation lifecycle
+// tracked by Filings (one INCORPORATION filing, then ANNUAL_REVIEW, EIN, etc.).
+// The people attached to a company are split by legal role:
+//   Officer          — directors / managers / secretaries (who runs it)
+//   Shareholder      — share or membership-interest holders (who owns it)
+//   BeneficialOwner  — PSC (UK) / BOI (US) / ultimate controllers (who controls it)
+// Enum values are mirrored in src/lib/domain.ts so client code never imports
+// @prisma/client; src/lib/domain.test.ts keeps the two in sync.
+
+generator client {
+  provider        = "prisma-client-js"
+  // Rust-free client: queries are compiled in TS/WASM and executed through the
+  // `pg` driver adapter (see src/lib/db.ts). No query-engine binary needed.
+  previewFeatures = ["driverAdapters", "queryCompiler"]
+  engineType      = "client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ──────────────────────────────────────────────────────────────────
+
+enum Jurisdiction {
+  AU    // Australia — ASIC
+  US_DE // United States — Delaware Division of Corporations
+  US_WY // United States — Wyoming Secretary of State
+  UK    // United Kingdom — Companies House
+}
+
+enum EntityType {
+  AU_PTY_LTD // Proprietary Limited company
+  US_LLC     // Limited Liability Company
+  US_C_CORP  // C-Corporation
+  UK_LTD     // Private company limited by shares
+}
+
+enum CompanyStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  ACTIVE
+  REJECTED
+  DEREGISTERED
+}
+
+enum FilingType {
+  INCORPORATION
+  ANNUAL_REVIEW
+  TAX_ID_APPLICATION
+  OFFICER_CHANGE
+  ADDRESS_CHANGE
+}
+
+enum FilingStatus {
+  DRAFT
+  QUEUED           // Paid, waiting for the background job to lodge it
+  SUBMITTED        // Accepted by the registry gateway, reference issued
+  UNDER_REVIEW     // Examiner review in progress
+  REQUIRES_ACTION  // Registry requisition — customer must fix something
+  APPROVED
+  REJECTED
+  FAILED           // Technical failure talking to the registry
+}
+
+enum OfficerRole {
+  DIRECTOR
+  SECRETARY
+  MANAGER    // LLC manager
+  PRESIDENT
+  TREASURER
+  ORGANIZER  // LLC organizer / incorporator
+}
+
+enum ShareClass {
+  ORDINARY
+  COMMON
+  PREFERRED
+  MEMBERSHIP_INTEREST
+}
+
+enum DocumentType {
+  CERTIFICATE_OF_INCORPORATION
+  CONSTITUTION
+  BYLAWS
+  OPERATING_AGREEMENT
+  ARTICLES_OF_ASSOCIATION
+  SHARE_CERTIFICATE
+  SHAREHOLDER_REGISTER
+  CONSENT_TO_ACT
+  REGISTRY_FILING
+  TAX_ID_CONFIRMATION
+}
+
+enum SubscriptionPlan {
+  PAY_AS_YOU_GO
+  COMPLIANCE_ESSENTIALS
+  COMPLIANCE_PRO
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+}
+
+enum ComplianceEventType {
+  ANNUAL_REVIEW
+  ANNUAL_REPORT
+  FRANCHISE_TAX
+  CONFIRMATION_STATEMENT
+  REGISTERED_AGENT_RENEWAL
+  TAX_RETURN
+}
+
+enum ComplianceEventStatus {
+  UPCOMING
+  DUE_SOON
+  OVERDUE
+  COMPLETED
+}
+
+// ─── Identity ───────────────────────────────────────────────────────────────
+
+model User {
+  id            String         @id @default(cuid())
+  email         String         @unique
+  name          String?
+  countryCode   String?        // ISO-3166 alpha-2, drives non-resident founder flows
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  companies     Company[]
+  subscriptions Subscription[]
+}
+
+// ─── Company aggregate ──────────────────────────────────────────────────────
+
+model Company {
+  id                    String        @id @default(cuid())
+  ownerId               String
+  owner                 User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  jurisdiction          Jurisdiction
+  entityType            EntityType
+  status                CompanyStatus @default(DRAFT)
+
+  proposedName          String
+  legalName             String?       // Name as registered (may differ in suffix/casing)
+  registryNumber        String?       // ACN / Delaware file number / Companies House number
+  taxId                 String?       // ABN / EIN / UTR
+  incorporatedAt        DateTime?
+
+  // Addresses are stored as JSON matching AddressSchema in src/lib/validation.
+  registeredAddress     Json
+  principalAddress      Json?         // AU "principal place of business", if different
+  useRegisteredAgent    Boolean       @default(false)
+  registeredAgentName   String?
+
+  businessActivity      String?
+  sicCodes              String[]      // UK SIC codes
+  financialYearEnd      String?       // MM-DD
+
+  // Jurisdiction-specific extras (share structure defaults, management style…)
+  jurisdictionData      Json?
+
+  // Snapshot of the wizard payload that was submitted, for auditability.
+  formationPayload      Json?
+
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+
+  officers              Officer[]
+  shareholders          Shareholder[]
+  beneficialOwners      BeneficialOwner[]
+  filings               Filing[]
+  documents             Document[]
+  complianceEvents      ComplianceEvent[]
+  subscription          Subscription?
+  orders                Order[]
+
+  @@index([ownerId])
+  @@index([jurisdiction, status])
+}
+
+model Officer {
+  id               String      @id @default(cuid())
+  companyId        String
+  company          Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  role             OfficerRole
+  fullName         String
+  email            String?
+  dateOfBirth      DateTime?
+  placeOfBirth     String?     // Required by ASIC for directors
+  nationality      String?
+  residentialAddress Json
+  directorId       String?     // AU Director ID (DIN)
+  consentSignedAt  DateTime?
+  appointedAt      DateTime?
+  ceasedAt         DateTime?
+  createdAt        DateTime    @default(now())
+
+  @@index([companyId])
+}
+
+model Shareholder {
+  id               String      @id @default(cuid())
+  companyId        String
+  company          Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  holderType       String      @default("INDIVIDUAL") // INDIVIDUAL | CORPORATE
+  fullName         String
+  email            String?
+  address          Json
+  shareClass       ShareClass
+  shareCount       Int
+  pricePerShare    Decimal     @db.Decimal(18, 4)
+  ownershipPercent Decimal     @db.Decimal(7, 4)
+  beneficiallyHeld Boolean     @default(true)
+  certificateNumber Int?
+  issuedAt         DateTime?
+  createdAt        DateTime    @default(now())
+
+  @@index([companyId])
+}
+
+model BeneficialOwner {
+  id                 String   @id @default(cuid())
+  companyId          String
+  company            Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  fullName           String
+  dateOfBirth        DateTime?
+  nationality        String?
+  residentialAddress Json
+  ownershipPercent   Decimal  @db.Decimal(7, 4)
+  // UK PSC nature-of-control statements, US BOI control descriptors, etc.
+  natureOfControl    String[]
+  createdAt          DateTime @default(now())
+
+  @@index([companyId])
+}
+
+// ─── Filings & registry integration ─────────────────────────────────────────
+
+model Filing {
+  id                String       @id @default(cuid())
+  companyId         String
+  company           Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  type              FilingType
+  status            FilingStatus @default(DRAFT)
+  jurisdiction      Jurisdiction
+
+  registryReference String?      @unique // ID returned by the government gateway
+  expedited         Boolean      @default(false)
+  submittedAt       DateTime?
+  decidedAt         DateTime?
+  lastPolledAt      DateTime?
+  pollAttempts      Int          @default(0)
+
+  // Last error / requisition returned by the registry, if any.
+  errorCode         String?
+  errorMessage      String?
+  errorField        String?
+
+  requestPayload    Json?
+  responsePayload   Json?
+
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  events            FilingEvent[]
+  documents         Document[]
+  order             Order?
+
+  @@index([companyId])
+  @@index([status])
+}
+
+// Append-only status history, drives the lodgement progress tracker.
+model FilingEvent {
+  id         String       @id @default(cuid())
+  filingId   String
+  filing     Filing       @relation(fields: [filingId], references: [id], onDelete: Cascade)
+  status     FilingStatus
+  message    String
+  metadata   Json?
+  createdAt  DateTime     @default(now())
+
+  @@index([filingId, createdAt])
+}
+
+// ─── Documents ──────────────────────────────────────────────────────────────
+
+model Document {
+  id          String       @id @default(cuid())
+  companyId   String
+  company     Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  filingId    String?
+  filing      Filing?      @relation(fields: [filingId], references: [id], onDelete: SetNull)
+  type        DocumentType
+  title       String
+  fileName    String
+  mimeType    String       @default("application/pdf")
+  storageKey  String       // Key in object storage (S3/R2/local disk)
+  sizeBytes   Int?
+  checksum    String?      // sha256
+  source      String       @default("GENERATED") // GENERATED | REGISTRY | UPLOADED
+  createdAt   DateTime     @default(now())
+
+  @@index([companyId, type])
+}
+
+// ─── Commerce ───────────────────────────────────────────────────────────────
+
+model Order {
+  id                 String   @id @default(cuid())
+  companyId          String
+  company            Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  filingId           String?  @unique
+  filing             Filing?  @relation(fields: [filingId], references: [id], onDelete: SetNull)
+  currency           String   // ISO-4217
+  // Amounts in minor units (cents/pence). Government fees are pass-through and
+  // always reported separately from platform service fees.
+  governmentFeeTotal Int
+  serviceFeeTotal    Int
+  addOnTotal         Int
+  taxTotal           Int
+  grandTotal         Int
+  lineItems          Json     // QuoteLineItem[] from src/lib/pricing
+  paymentProvider    String?
+  paymentReference   String?
+  paidAt             DateTime?
+  createdAt          DateTime @default(now())
+}
+
+model Subscription {
+  id                 String             @id @default(cuid())
+  userId             String
+  user               User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  companyId          String?            @unique
+  company            Company?           @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  plan               SubscriptionPlan
+  status             SubscriptionStatus @default(ACTIVE)
+  includesRegisteredAgent Boolean       @default(false)
+  currentPeriodStart DateTime
+  currentPeriodEnd   DateTime
+  cancelAtPeriodEnd  Boolean            @default(false)
+  externalId         String?            @unique // Stripe subscription ID
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  @@index([userId])
+}
+
+// ─── Compliance calendar ────────────────────────────────────────────────────
+
+model ComplianceEvent {
+  id          String                @id @default(cuid())
+  companyId   String
+  company     Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  type        ComplianceEventType
+  title       String
+  description String?
+  dueDate     DateTime
+  status      ComplianceEventStatus @default(UPCOMING)
+  feeEstimate Int?                  // Minor units, in company currency
+  completedAt DateTime?
+  createdAt   DateTime              @default(now())
+
+  @@index([companyId, dueDate])
+}
