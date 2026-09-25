@@ -30,7 +30,7 @@ export interface DocumentContext {
     address: Address;
     shareClass: ShareClass;
     units: number;
-    /** Minor units. */
+    /** Major units. */
     pricePerUnit: number;
     beneficiallyHeld: boolean;
     certificateNumber?: number;

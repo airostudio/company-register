@@ -1,6 +1,5 @@
 import type { EntityType, Jurisdiction } from "@/lib/domain";
-import { getEntityProfile } from "@/lib/jurisdictions";
-import { composeCompanyName } from "@/lib/jurisdictions";
+import { composeCompanyName, getEntityProfile, getJurisdiction } from "@/lib/jurisdictions";
 import type { Address } from "@/lib/validation/address";
 import type { FormationApplication, OfficerInput } from "@/lib/validation/formation";
 
@@ -54,6 +53,7 @@ export function buildApplication(
   const roles = entity.officerRequirements.map((r) => r.role);
   const total = entity.ownership.defaultTotalUnits;
   const half = Math.floor(total / 2);
+  const control = [getJurisdiction(jurisdiction).people.beneficialOwnership.natureOfControlOptions[0]!.value];
 
   return {
     entity: { jurisdiction, entityType },
@@ -105,7 +105,7 @@ export function buildApplication(
           nationality: "AU",
           residentialAddress: RESIDENCE[jurisdiction],
           ownershipPercent: 50,
-          natureOfControl: ["VOTING_CONTROL"],
+          natureOfControl: control,
         },
         {
           id: "bo_2",
@@ -114,7 +114,7 @@ export function buildApplication(
           nationality: "AU",
           residentialAddress: RESIDENCE[jurisdiction],
           ownershipPercent: 50,
-          natureOfControl: ["VOTING_CONTROL"],
+          natureOfControl: control,
         },
       ],
       noBeneficialOwners: false,

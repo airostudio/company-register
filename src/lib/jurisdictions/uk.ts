@@ -34,7 +34,7 @@ export const unitedKingdom: JurisdictionProfile = {
         shareClasses: ["ORDINARY", "PREFERRED"],
         defaultShareClass: "ORDINARY",
         defaultTotalUnits: 100,
-        defaultPricePerUnit: 1_00,
+        defaultPricePerUnit: 1,
         unitLabel: { singular: "share", plural: "shares" },
         totalUnitsEditable: true,
       },

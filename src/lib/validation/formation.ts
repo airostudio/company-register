@@ -151,8 +151,8 @@ export const shareholderSchema = z.object({
   address: addressSchema,
   shareClass: z.enum(SHARE_CLASSES),
   units: z.number({ error: "Enter a whole number" }).int("Enter a whole number").min(1, "Allocate at least 1"),
-  /** Issue price per unit, minor units. */
-  pricePerUnit: z.number({ error: "Enter an amount" }).int().min(0),
+  /** Issue price per unit in major units (supports sub-cent par values). */
+  pricePerUnit: z.number({ error: "Enter an amount" }).min(0, "Can't be negative").max(1_000_000),
   beneficiallyHeld: z.boolean(),
 });
 export type ShareholderInput = z.infer<typeof shareholderSchema>;
@@ -311,8 +311,12 @@ export function createPeopleStepSchema(
       });
 
       // Beneficial ownership / PSC.
+      const controlOptions = new Set(bo.natureOfControlOptions.map((o) => o.value));
       v.beneficialOwners.forEach((b, i) => {
         checkAddress(ctx, b.residentialAddress, ["beneficialOwners", i, "residentialAddress"], { requirePhysical: true });
+        if (b.natureOfControl.some((n) => !controlOptions.has(n))) {
+          addIssue(ctx, ["beneficialOwners", i, "natureOfControl"], "Choose from the listed nature-of-control statements");
+        }
       });
       const declared = new Set(v.beneficialOwners.map((b) => b.fullName.trim().toLowerCase()));
       const significant = summary.holders.filter(

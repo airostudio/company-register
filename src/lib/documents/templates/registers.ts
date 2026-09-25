@@ -1,7 +1,7 @@
 import { OFFICER_ROLE_LABELS, SHARE_CLASS_LABELS } from "@/lib/domain";
 import { getEntityProfile, getJurisdiction } from "@/lib/jurisdictions";
 import { formatAddress } from "@/lib/validation/address";
-import { formatDate, formatMoney } from "@/lib/utils";
+import { formatDate, formatUnitPrice } from "@/lib/utils";
 import { renderPdf, theme } from "../pdf";
 import type { DocumentContext } from "../types";
 
@@ -89,7 +89,7 @@ export function renderShareholderRegister(ctx: DocumentContext): Promise<Uint8Ar
         formatAddress(s.address),
         SHARE_CLASS_LABELS[s.shareClass],
         isMembership ? `${s.units}%` : s.units.toLocaleString("en"),
-        isMembership ? "—" : formatMoney(s.pricePerUnit, j.currency),
+        isMembership ? "—" : formatUnitPrice(s.pricePerUnit, j.currency),
         s.beneficiallyHeld ? "Yes" : "No",
         formatDate(ctx.company.incorporatedAt ?? ctx.generatedAt),
       ]),
@@ -150,7 +150,7 @@ export function renderShareCertificate(ctx: DocumentContext, holderIndex: number
         .fontSize(13)
         .fillColor(theme.ink)
         .text(
-          `This is to certify that ${holder.fullName} of ${formatAddress(holder.address)} is the registered holder of ${holder.units.toLocaleString("en")} fully paid ${SHARE_CLASS_LABELS[holder.shareClass].toLowerCase()} at an issue price of ${formatMoney(holder.pricePerUnit, j.currency)} each, subject to the ${ctx.company.jurisdiction === "UK" ? "articles of association" : ctx.company.jurisdiction === "AU" ? "constitution" : "bylaws"} of the company.`,
+          `This is to certify that ${holder.fullName} of ${formatAddress(holder.address)} is the registered holder of ${holder.units.toLocaleString("en")} fully paid ${SHARE_CLASS_LABELS[holder.shareClass].toLowerCase()} at an issue price of ${formatUnitPrice(holder.pricePerUnit, j.currency)} each, subject to the ${ctx.company.jurisdiction === "UK" ? "articles of association" : ctx.company.jurisdiction === "AU" ? "constitution" : "bylaws"} of the company.`,
           w.left + 40,
           doc.y,
           { width: w.contentWidth - 80, align: "center", lineGap: 4 },

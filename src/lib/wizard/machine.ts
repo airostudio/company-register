@@ -138,18 +138,23 @@ export function isReadyToSubmit(draft: WizardDraft): boolean {
   return firstIncompleteStep(draft) === "checkout";
 }
 
-/** The complete application, or undefined if any step is invalid. */
-export function toApplication(draft: WizardDraft): FormationApplication | undefined {
+/** Parsed values for the given steps, or undefined if any of them is invalid. */
+export function parseSteps<K extends FormStepId>(draft: WizardDraft, steps: readonly K[]): Pick<FormationApplication, K> | undefined {
   const entity = selectedEntity(draft);
   if (!entity) return undefined;
   const schemas = createStepSchemas(entity.jurisdiction, entity.entityType);
   const out: Record<string, unknown> = {};
-  for (const step of FORM_STEPS) {
+  for (const step of steps) {
     const r = schemas[step].safeParse(draft[step]);
     if (!r.success) return undefined;
     out[step] = r.data;
   }
-  return out as unknown as FormationApplication;
+  return out as Pick<FormationApplication, K>;
+}
+
+/** The complete application, or undefined if any step is invalid. */
+export function toApplication(draft: WizardDraft): FormationApplication | undefined {
+  return parseSteps(draft, FORM_STEPS);
 }
 
 // ─── Defaults & reconciliation ──────────────────────────────────────────────

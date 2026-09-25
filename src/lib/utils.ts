@@ -20,6 +20,16 @@ export function formatMoney(amount: MinorUnits, currency: Currency): string {
   }).format(amount / 100);
 }
 
+/** Per-share prices in major units, keeping sub-cent par values like $0.0001. */
+export function formatUnitPrice(amount: number, currency: Currency): string {
+  return new Intl.NumberFormat(LOCALE_BY_CURRENCY[currency], {
+    style: "currency",
+    currency,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 6,
+  }).format(amount);
+}
+
 export function formatDate(value: Date | string, opts: Intl.DateTimeFormatOptions = { dateStyle: "medium" }): string {
   const date = typeof value === "string" ? new Date(value) : value;
   return new Intl.DateTimeFormat("en-GB", opts).format(date);

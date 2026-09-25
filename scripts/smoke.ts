@@ -1,0 +1,68 @@
+/**
+ * End-to-end smoke test against a running server (npm run dev / start):
+ * submits a formation per jurisdiction, follows the lodgement until the mock
+ * registry approves it, then downloads every generated document.
+ *
+ *   MOCK_REGISTRY_SPEED=0.2 npm run dev   # in another terminal
+ *   npx tsx scripts/smoke.ts [AU|US_DE|US_WY|UK ...]
+ */
+import type { CreateFormationResponse, FilingView } from "@/lib/api-types";
+import type { EntityType, Jurisdiction } from "@/lib/domain";
+import { buildApplication } from "@/test/fixtures";
+
+const BASE_URL = process.env.BASE_URL ?? "http://localhost:3000";
+const TARGETS: Record<string, [Jurisdiction, EntityType]> = {
+  AU: ["AU", "AU_PTY_LTD"],
+  US_DE: ["US_DE", "US_C_CORP"],
+  US_WY: ["US_WY", "US_LLC"],
+  UK: ["UK", "UK_LTD"],
+};
+
+async function run(key: string) {
+  const [jurisdiction, entityType] = TARGETS[key]!;
+  const app = buildApplication(jurisdiction, entityType, `Smoke Test ${Date.now().toString(36)}`);
+  app.review.contactEmail = `smoke+${key.toLowerCase()}-${Date.now()}@example.com`;
+
+  const res = await fetch(`${BASE_URL}/api/formations`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(app),
+  });
+  const body = await res.json();
+  if (res.status !== 201) throw new Error(`${key}: POST /api/formations → ${res.status} ${JSON.stringify(body)}`);
+  const created = body as CreateFormationResponse;
+  const cookie = res.headers.get("set-cookie")?.split(";")[0] ?? "";
+  console.log(`${key}: created filing ${created.filingId}, due today ${created.quote.totals.dueToday / 100} ${created.quote.currency}`);
+
+  const seen: string[] = [];
+  const deadline = Date.now() + 120_000;
+  let view: FilingView;
+  for (;;) {
+    const r = await fetch(`${BASE_URL}/api/filings/${created.filingId}`, { headers: { cookie } });
+    view = (await r.json()) as FilingView;
+    if (!r.ok) throw new Error(`${key}: GET filing → ${r.status} ${JSON.stringify(view)}`);
+    if (seen.at(-1) !== view.status) seen.push(view.status);
+    if (view.settled && (view.status !== "APPROVED" || view.documents.length)) break;
+    if (Date.now() > deadline) throw new Error(`${key}: timed out in ${view.status}`);
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+  console.log(`${key}: ${seen.join(" → ")} · ${view.company.registryNumber ?? "-"}`);
+  if (view.status !== "APPROVED") throw new Error(`${key}: ended in ${view.status}: ${view.error?.message}`);
+
+  for (const doc of view.documents) {
+    const d = await fetch(`${BASE_URL}/api/documents/${doc.id}`, { headers: { cookie } });
+    const bytes = new Uint8Array(await d.arrayBuffer());
+    const isPdf = new TextDecoder().decode(bytes.slice(0, 5)) === "%PDF-";
+    if (!d.ok || !isPdf) throw new Error(`${key}: document ${doc.title} failed (${d.status})`);
+  }
+  console.log(`${key}: ${view.documents.length} documents OK (${view.documents.map((d) => d.title).join("; ")})`);
+}
+
+const keys = process.argv.slice(2).length ? process.argv.slice(2) : Object.keys(TARGETS);
+Promise.all(keys.map(run)).then(
+  () => console.log("Smoke test passed"),
+  (error) => {
+    console.error(error);
+    process.exit(1);
+  },
+);

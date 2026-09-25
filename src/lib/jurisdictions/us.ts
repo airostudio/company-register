@@ -113,7 +113,7 @@ function cCorp(governmentFee: number, expediteFee: number | undefined, expedited
       shareClasses: ["COMMON", "PREFERRED"],
       defaultShareClass: "COMMON",
       defaultTotalUnits: 10_000_000,
-      defaultPricePerUnit: 0,
+      defaultPricePerUnit: 0.0001,
       unitLabel: { singular: "share", plural: "shares" },
       totalUnitsEditable: true,
     },

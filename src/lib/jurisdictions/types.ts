@@ -30,8 +30,8 @@ export interface OwnershipRules {
   defaultShareClass: ShareClass;
   /** Default number of units issued at formation (for LLCs this is 100 = 100%). */
   defaultTotalUnits: number;
-  /** Default issue price per unit, minor units. */
-  defaultPricePerUnit: MinorUnits;
+  /** Default issue price per unit in major units (e.g. 1 = $1.00; startups often use 0.0001). */
+  defaultPricePerUnit: number;
   unitLabel: { singular: string; plural: string };
   /** Holders that are allowed to change `totalUnits` (false for LLC percentages). */
   totalUnitsEditable: boolean;
