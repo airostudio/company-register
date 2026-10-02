@@ -1,12 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AlertTriangle, CheckCircle2, Circle, CreditCard, FileText, Loader2, XCircle } from "lucide-react";
+import Link from "next/link";
+import { AlertTriangle, CheckCircle2, Circle, CreditCard, FileText, Loader2, PenLine, Send, XCircle } from "lucide-react";
 import type { FilingView } from "@/lib/api-types";
 import { FILING_STATUS_LABELS, LIFECYCLE_LABELS, LIFECYCLE_STAGES, filingStatusToLifecycle, type Currency } from "@/lib/domain";
 import { getJurisdiction } from "@/lib/jurisdictions";
 import { cn, formatDate, formatMoney } from "@/lib/utils";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 
@@ -29,7 +31,8 @@ export function LodgementTracker({ filingId, initial, compact }: { filingId: str
         setView(body as FilingView);
         setError(undefined);
         // Keep polling until settled and (if approved) the document pack has landed.
-        const done = (body as FilingView).settled && ((body as FilingView).status !== "APPROVED" || (body as FilingView).documents.length > 0);
+        const v = body as FilingView;
+        const done = v.settled && (v.status !== "APPROVED" || v.packReady);
         if (!done) timer = setTimeout(poll, POLL_MS);
       } catch (e) {
         if (cancelled) return;
@@ -100,6 +103,7 @@ export function LodgementTracker({ filingId, initial, compact }: { filingId: str
           </AlertDescription>
         </Alert>
       )}
+      {view.signatures.length > 0 && view.status === "AWAITING_SIGNATURES" && <SignaturesPanel view={view} />}
       {view.status === "APPROVED" && (
         <Alert variant="success">
           <CheckCircle2 />
@@ -138,7 +142,7 @@ export function LodgementTracker({ filingId, initial, compact }: { filingId: str
         </ol>
       )}
 
-      {view.status === "APPROVED" && view.documents.length === 0 && (
+      {view.status === "APPROVED" && !view.packReady && (
         <p className="flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="size-4 animate-spin" /> Generating your document pack…
         </p>
@@ -184,5 +188,60 @@ function PayButton({ filingId }: { filingId: string }) {
       </Button>
       {error && <p className="text-xs text-destructive">{error}</p>}
     </div>
+  );
+}
+
+const SIGNATURE_BADGE = {
+  PENDING: { label: "Waiting", variant: "secondary" },
+  SIGNED: { label: "Signed", variant: "success" },
+  DECLINED: { label: "Declined", variant: "destructive" },
+  EXPIRED: { label: "Link expired", variant: "warning" },
+} as const;
+
+function SignaturesPanel({ view }: { view: FilingView }) {
+  const signed = view.signatures.filter((s) => s.status === "SIGNED").length;
+  return (
+    <div className="space-y-3 rounded-lg border p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="flex items-center gap-2 text-sm font-medium">
+          <PenLine className="size-4 text-primary" /> Officer consents ({signed} of {view.signatures.length} signed)
+        </p>
+        <p className="text-xs text-muted-foreground">We lodge as soon as everyone has signed.</p>
+      </div>
+      <ul className="divide-y rounded-md border text-sm">
+        {view.signatures.map((s) => (
+          <li key={s.id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
+            <span>
+              <span className="font-medium">{s.signerName}</span>
+              <span className="ml-2 text-xs text-muted-foreground">{s.signerEmail}</span>
+            </span>
+            <span className="flex items-center gap-2">
+              <Badge variant={SIGNATURE_BADGE[s.status].variant}>{SIGNATURE_BADGE[s.status].label}</Badge>
+              {s.canSignHere && (
+                <Button asChild size="sm">
+                  <Link href={`/sign/request/${s.id}`}>Sign now</Link>
+                </Button>
+              )}
+              {(s.status === "PENDING" || s.status === "EXPIRED") && <ResendButton filingId={view.id} signatureId={s.id} />}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function ResendButton({ filingId, signatureId }: { filingId: string; signatureId: string }) {
+  const [state, setState] = useState<"idle" | "busy" | "sent" | "error">("idle");
+  const resend = async () => {
+    setState("busy");
+    const res = await fetch(`/api/filings/${filingId}/signatures/${signatureId}/resend`, { method: "POST" });
+    setState(res.ok ? "sent" : "error");
+  };
+  return (
+    <Button size="sm" variant="ghost" onClick={resend} disabled={state === "busy" || state === "sent"}>
+      {state === "busy" ? <Loader2 className="animate-spin" /> : <Send />}
+      {state === "sent" ? "Sent" : state === "error" ? "Retry" : "Resend link"}
+    </Button>
   );
 }

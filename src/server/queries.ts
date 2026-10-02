@@ -8,8 +8,9 @@ export async function getFilingView(filingId: string, ownerId: string): Promise<
   const filing = await db().filing.findFirst({
     where: { id: filingId, company: { ownerId } },
     include: {
-      company: true,
+      company: { include: { owner: true } },
       order: true,
+      signatures: { orderBy: { createdAt: "asc" } },
       events: { orderBy: { createdAt: "asc" } },
       documents: { orderBy: { createdAt: "asc" }, select: { id: true, type: true, title: true, source: true } },
     },
@@ -35,6 +36,16 @@ export async function getFilingView(filingId: string, ownerId: string): Promise<
     events: filing.events.map((e) => ({ id: e.id, status: e.status, message: e.message, createdAt: e.createdAt.toISOString() })),
     documents: filing.documents,
     payment: filing.order ? { status: filing.order.status, amount: filing.order.grandTotal, currency: filing.order.currency } : null,
+    packReady: filing.documents.some((d) => d.source === "GENERATED"),
+    signatures: filing.signatures.map((s) => ({
+      id: s.id,
+      signerName: s.signerName,
+      signerEmail: s.signerEmail,
+      roles: s.roles,
+      status: s.status === "PENDING" && s.expiresAt < new Date() ? "EXPIRED" : s.status,
+      signedAt: s.signedAt?.toISOString() ?? null,
+      canSignHere: s.status === "PENDING" && !!filing.company.owner.emailVerifiedAt && filing.company.owner.email.toLowerCase() === s.signerEmail,
+    })),
     settled: isSettled(filing.status),
   };
 }

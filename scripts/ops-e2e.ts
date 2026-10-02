@@ -4,6 +4,7 @@
  */
 import { renderRegistryCertificate } from "@/lib/documents";
 import { buildApplication } from "@/test/fixtures";
+import { signAll, uniqueOfficerEmails } from "./e2e-helpers";
 const BASE = process.env.BASE_URL ?? "http://localhost:3000";
 const check = (label: string, ok: boolean, extra = "") => { console.log(`${ok ? "PASS" : "FAIL"} ${label} ${extra}`); if (!ok) process.exitCode = 1; };
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -32,9 +33,11 @@ async function act(cookie: string, taskId: string, fields: Record<string, string
 
   const app = buildApplication("AU", "AU_PTY_LTD", name);
   app.review.contactEmail = `assisted-${Date.now()}@example.com`;
+  uniqueOfficerEmails(app, "ops");
   const res = await fetch(`${BASE}/api/formations`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(app) });
   const created = await res.json();
   const customer = res.headers.get("set-cookie")!.split(";")[0]!;
+  await signAll(BASE, app);
   let view: any;
   for (let i = 0; i < 20 && view?.status !== "SUBMITTED"; i++) { await sleep(1000); view = await filing(customer, created.filingId); }
   check("filing queued with ops", view.status === "SUBMITTED" && view.registryReference?.startsWith("OPS-ASIC-"), view.registryReference);

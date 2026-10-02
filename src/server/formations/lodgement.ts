@@ -175,7 +175,7 @@ export async function fulfilApprovedFiling(filingId: string): Promise<{ document
     where: { id: filingId },
     include: {
       company: { include: { officers: true, shareholders: true, beneficialOwners: true } },
-      documents: { select: { source: true } },
+      documents: { select: { source: true, type: true } },
     },
   });
   if (filing.status !== "APPROVED") return { documents: 0, complianceEvents: 0 };
@@ -183,7 +183,9 @@ export async function fulfilApprovedFiling(filingId: string): Promise<{ document
   let documents = 0;
 
   if (!filing.documents.some((d) => d.source === "GENERATED")) {
-    const pack = await generateDocumentPack(documentContextFromCompany(company));
+    // Officers' e-signed consents replace the unsigned consent form in the pack.
+    const signedConsents = filing.documents.some((d) => d.source === "SIGNED" && d.type === "CONSENT_TO_ACT");
+    const pack = await generateDocumentPack(documentContextFromCompany(company), { exclude: signedConsents ? ["CONSENT_TO_ACT"] : [] });
     for (const doc of pack) {
       const stored = await storage().put(documentKey(company.id, doc.fileName), doc.content);
       await prisma.document.create({
@@ -254,7 +256,7 @@ export async function fulfilApprovedFiling(filingId: string): Promise<{ document
 }
 
 /** Email the company owner about a milestone. Failures are logged, never thrown. */
-async function notifyCustomer(filingId: string, status: "APPROVED" | "REQUIRES_ACTION" | "REJECTED", detail: string) {
+export async function notifyCustomer(filingId: string, status: "APPROVED" | "REQUIRES_ACTION" | "REJECTED", detail: string) {
   try {
     const filing = await db().filing.findUniqueOrThrow({ where: { id: filingId }, include: { company: { include: { owner: true } } } });
     const name = filing.company.legalName ?? filing.company.proposedName;

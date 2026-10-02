@@ -16,6 +16,7 @@ export const theme = {
   bold: "Helvetica-Bold",
   serif: "Times-Roman",
   serifBold: "Times-Bold",
+  serifItalic: "Times-Italic",
 } as const;
 
 export interface PdfMeta {

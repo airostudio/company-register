@@ -38,6 +38,18 @@ export interface FilingView {
   events: { id: string; status: FilingStatus; message: string; createdAt: string }[];
   documents: { id: string; type: DocumentType; title: string; source: string }[];
   payment: { status: "PENDING" | "PAID" | "EXPIRED" | "REFUNDED"; amount: number; currency: string } | null;
+  /** True once the post-approval document pack has been generated. */
+  packReady: boolean;
+  signatures: {
+    id: string;
+    signerName: string;
+    signerEmail: string;
+    roles: string[];
+    status: "PENDING" | "SIGNED" | "DECLINED" | "EXPIRED";
+    signedAt: string | null;
+    /** The signed-in viewer is this signer (verified email) and can sign in-app. */
+    canSignHere: boolean;
+  }[];
   settled: boolean;
 }
 

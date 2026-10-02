@@ -9,6 +9,7 @@
 import type { CreateFormationResponse, FilingView } from "@/lib/api-types";
 import type { EntityType, Jurisdiction } from "@/lib/domain";
 import { buildApplication } from "@/test/fixtures";
+import { signConsent, signingToken, uniqueOfficerEmails } from "./e2e-helpers";
 
 const BASE_URL = process.env.BASE_URL ?? "http://localhost:3000";
 const TARGETS: Record<string, [Jurisdiction, EntityType]> = {
@@ -22,6 +23,7 @@ async function run(key: string) {
   const [jurisdiction, entityType] = TARGETS[key]!;
   const app = buildApplication(jurisdiction, entityType, `Smoke Test ${Date.now().toString(36)}`);
   app.review.contactEmail = `smoke+${key.toLowerCase()}-${Date.now()}@example.com`;
+  uniqueOfficerEmails(app, key.toLowerCase());
 
   const res = await fetch(`${BASE_URL}/api/formations`, {
     method: "POST",
@@ -34,6 +36,18 @@ async function run(key: string) {
   const cookie = res.headers.get("set-cookie")?.split(";")[0] ?? "";
   console.log(`${key}: created filing ${created.filingId}, due today ${created.quote.totals.dueToday / 100} ${created.quote.currency}`);
 
+  // Officers e-sign their consents via the emailed links before lodgement starts.
+  for (const officer of app.people.officers) {
+    const token = await signingToken(BASE_URL, officer.email!);
+    const wrong = await signConsent(BASE_URL, token, "Somebody Else");
+    if (wrong.status !== 400) throw new Error(`${key}: wrong name was accepted (${wrong.status})`);
+    const ok = await signConsent(BASE_URL, token, officer.fullName.toUpperCase());
+    if (ok.status !== 200) throw new Error(`${key}: signing failed ${JSON.stringify(ok.body)}`);
+    const again = await signConsent(BASE_URL, token, officer.fullName);
+    if (again.status !== 409) throw new Error(`${key}: consent signed twice (${again.status})`);
+  }
+  console.log(`${key}: ${app.people.officers.length} consent(s) e-signed`);
+
   const seen: string[] = [];
   const deadline = Date.now() + 120_000;
   let view: FilingView;
@@ -42,11 +56,13 @@ async function run(key: string) {
     view = (await r.json()) as FilingView;
     if (!r.ok) throw new Error(`${key}: GET filing → ${r.status} ${JSON.stringify(view)}`);
     if (seen.at(-1) !== view.status) seen.push(view.status);
-    if (view.settled && (view.status !== "APPROVED" || view.documents.length)) break;
+    if (view.settled && (view.status !== "APPROVED" || view.packReady)) break;
     if (Date.now() > deadline) throw new Error(`${key}: timed out in ${view.status}`);
     await new Promise((r) => setTimeout(r, 1000));
   }
   console.log(`${key}: ${seen.join(" → ")} · ${view.company.registryNumber ?? "-"}`);
+  if (!view.documents.some((d) => d.source === "SIGNED" && d.type === "CONSENT_TO_ACT")) throw new Error(`${key}: signed consent missing from vault`);
+  if (view.documents.some((d) => d.source === "GENERATED" && d.type === "CONSENT_TO_ACT")) throw new Error(`${key}: unsigned consent still generated`);
   if (view.status !== "APPROVED") throw new Error(`${key}: ended in ${view.status}: ${view.error?.message}`);
 
   for (const doc of view.documents) {

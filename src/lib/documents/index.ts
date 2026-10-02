@@ -35,14 +35,14 @@ function doc(type: DocumentType, ctx: DocumentContext, content: Uint8Array, suff
  * Render every document in the entity type's formation pack.
  * Share certificates produce one PDF per shareholder.
  */
-export async function generateDocumentPack(ctx: DocumentContext): Promise<GeneratedDocument[]> {
+export async function generateDocumentPack(ctx: DocumentContext, opts: { exclude?: DocumentType[] } = {}): Promise<GeneratedDocument[]> {
   const entity = getEntityProfile(ctx.company.jurisdiction, ctx.company.entityType);
   const ctxWithCerts: DocumentContext = {
     ...ctx,
     shareholders: ctx.shareholders.map((s, i) => ({ ...s, certificateNumber: s.certificateNumber ?? i + 1 })),
   };
 
-  const jobs = entity.documentPack.flatMap((type): Promise<GeneratedDocument>[] => {
+  const jobs = entity.documentPack.filter((t) => !opts.exclude?.includes(t)).flatMap((type): Promise<GeneratedDocument>[] => {
     switch (type) {
       case "CERTIFICATE_OF_INCORPORATION":
         return [renderIncorporationSummary(ctxWithCerts).then((c) => doc(type, ctxWithCerts, c, "Summary"))];
@@ -69,3 +69,4 @@ export async function generateDocumentPack(ctx: DocumentContext): Promise<Genera
   return Promise.all(jobs);
 }
 export { renderLodgementPack } from "./templates/lodgement-pack";
+export { renderConsentsToAct, consentStatements, type ConsentSignature } from "./templates/registers";

@@ -6,7 +6,7 @@ import type { FormationApplication } from "@/lib/validation/formation";
 import { db } from "../db";
 import { AppError } from "../errors";
 import { transition } from "../formations/lodgement";
-import { dispatchFilingLodgement } from "../jobs/dispatch";
+import { advanceIfAllSigned, requestSignatures } from "../signatures/service";
 import { toCheckoutLineItems } from "./line-items";
 import { getStripe, paymentsMode } from "./stripe";
 
@@ -74,10 +74,17 @@ export async function markOrderPaid(orderId: string, payment: PaymentDetails): P
   const order = await prisma.order.findUniqueOrThrow({ where: { id: orderId }, include: { company: true, filing: true } });
   if (order.status !== "PAID") return false;
 
-  // Lodgement is the critical path, so queue it before any bookkeeping that could fail.
+  // Lodgement is the critical path, so move it forward before any bookkeeping that could fail.
+  // Next: officers e-sign their consents; the last signature queues the lodgement.
   if (order.filing?.status === "DRAFT") {
-    const moved = await transition(order.filing, "DRAFT", "QUEUED", "Payment received — queued for lodgement.", {}, { provider: payment.provider, reference: payment.reference });
-    if (moved) await dispatchFilingLodgement(order.filing.id);
+    await transition(order.filing, "DRAFT", "AWAITING_SIGNATURES", "Payment received — waiting for officers to sign their consents.", {}, { provider: payment.provider, reference: payment.reference });
+  }
+  if (order.filing) {
+    const filing = await prisma.filing.findUniqueOrThrow({ where: { id: order.filing.id } });
+    if (filing.status === "AWAITING_SIGNATURES") {
+      await requestSignatures(filing.id); // idempotent
+      await advanceIfAllSigned(filing.id);
+    }
   }
 
   if (payment.stripeCustomerId) {

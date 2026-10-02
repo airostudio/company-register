@@ -30,6 +30,7 @@ export type ShareClass = (typeof SHARE_CLASSES)[number];
 
 export const FILING_STATUSES = [
   "DRAFT",
+  "AWAITING_SIGNATURES",
   "QUEUED",
   "SUBMITTED",
   "UNDER_REVIEW",
@@ -113,6 +114,7 @@ export const LIFECYCLE_LABELS: Record<LifecycleStage, string> = {
 export function filingStatusToLifecycle(status: FilingStatus): LifecycleStage {
   switch (status) {
     case "DRAFT":
+    case "AWAITING_SIGNATURES":
       return "DRAFT";
     case "QUEUED":
     case "SUBMITTED":
@@ -130,6 +132,7 @@ export function filingStatusToLifecycle(status: FilingStatus): LifecycleStage {
 export function filingStatusToCompanyStatus(status: FilingStatus): CompanyStatus {
   switch (status) {
     case "DRAFT":
+    case "AWAITING_SIGNATURES":
       return "DRAFT";
     case "QUEUED":
     case "SUBMITTED":
@@ -147,6 +150,7 @@ export function filingStatusToCompanyStatus(status: FilingStatus): CompanyStatus
 
 export const FILING_STATUS_LABELS: Record<FilingStatus, string> = {
   DRAFT: "Awaiting payment",
+  AWAITING_SIGNATURES: "Awaiting signatures",
   QUEUED: "Queued for lodgement",
   SUBMITTED: "Submitted to registry",
   UNDER_REVIEW: "Under review",

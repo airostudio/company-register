@@ -171,17 +171,46 @@ export function renderShareCertificate(ctx: DocumentContext, holderIndex: number
   );
 }
 
-export function renderConsentsToAct(ctx: DocumentContext): Promise<Uint8Array> {
-  const j = getJurisdiction(ctx.company.jurisdiction);
-  const law =
-    ctx.company.jurisdiction === "AU"
-      ? "section 201D of the Corporations Act 2001 (Cth)"
-      : ctx.company.jurisdiction === "UK"
-        ? "section 12 of the Companies Act 2006"
-        : "the laws of the State of incorporation";
+export interface ConsentSignature {
+  signedName: string;
+  signedAt: string;
+  email: string;
+  ip?: string | null;
+  userAgent?: string | null;
+  documentHash: string;
+  requestId: string;
+}
 
-  return renderPdf({ title: `${ctx.company.name} — Consents to Act`, footer: companyFooter(ctx) }, (w) => {
-    ctx.officers.forEach((officer, i) => {
+export function consentLaw(jurisdiction: DocumentContext["company"]["jurisdiction"]): string {
+  return jurisdiction === "AU"
+    ? "section 201D of the Corporations Act 2001 (Cth)"
+    : jurisdiction === "UK"
+      ? "section 12 of the Companies Act 2006"
+      : "the laws of the State of incorporation";
+}
+
+/** The consent wording shown on the signing page and in the PDF (kept in one place so they can't diverge). */
+export function consentStatements(officer: DocumentContext["officers"][number], ctx: DocumentContext): string[] {
+  const roles = officer.roles.map((r) => OFFICER_ROLE_LABELS[r]).join(" and ");
+  return [
+    `I, ${officer.fullName}, consent to act as ${roles.toLowerCase()} of ${ctx.company.name} in accordance with ${consentLaw(ctx.company.jurisdiction)}, with effect from the date of the company's registration.`,
+    "I confirm that I am not disqualified from managing a company, that the details above are correct, and that I understand the duties and responsibilities of the office.",
+  ];
+}
+
+/**
+ * Consent to act for every officer (one per page), or a single officer when
+ * `officerIndex` is set. With `signature`, the page carries the electronic
+ * signature and an audit-trail page is appended.
+ */
+export function renderConsentsToAct(ctx: DocumentContext, opts: { officerIndex?: number; signature?: ConsentSignature } = {}): Promise<Uint8Array> {
+  const j = getJurisdiction(ctx.company.jurisdiction);
+  const officers = opts.officerIndex === undefined ? ctx.officers : [ctx.officers[opts.officerIndex]!];
+  const sig = opts.signature;
+  const title = officers.length === 1 ? `${ctx.company.name} — Consent to Act — ${officers[0]!.fullName}` : `${ctx.company.name} — Consents to Act`;
+
+  return renderPdf({ title, footer: companyFooter(ctx) }, (w) => {
+    officers.forEach((officer, i) => {
       if (i > 0) w.doc.addPage();
       const roles = officer.roles.map((r) => OFFICER_ROLE_LABELS[r]).join(" and ");
       w.title(`Consent to Act as ${roles}`, `${ctx.company.name} · ${j.name}`);
@@ -192,13 +221,32 @@ export function renderConsentsToAct(ctx: DocumentContext): Promise<Uint8Array> {
         ...(officer.placeOfBirth ? ([["Place of birth", officer.placeOfBirth]] as [string, string][]) : []),
         ...(officer.directorId ? ([["Director ID", officer.directorId]] as [string, string][]) : []),
       ]);
-      w.paragraph(
-        `I, ${officer.fullName}, consent to act as ${roles.toLowerCase()} of ${ctx.company.name} in accordance with ${law}, with effect from the date of the company's registration.`,
-      );
-      w.paragraph(
-        "I confirm that I am not disqualified from managing a company, that the details above are correct, and that I understand the duties and responsibilities of the office.",
-      );
-      w.signatureBlock([{ name: officer.fullName, capacity: roles }]);
+      consentStatements(officer, ctx).forEach((p) => w.paragraph(p));
+      if (sig) {
+        w.doc.moveDown(1);
+        w.doc.font(theme.serifItalic).fontSize(22).fillColor(theme.accent).text(sig.signedName, w.left, w.doc.y);
+        w.rule();
+        w.paragraph(`Electronically signed by ${officer.fullName} (${sig.email}) on ${formatDate(sig.signedAt, { dateStyle: "long", timeStyle: "long", timeZone: "UTC" })}.`, { size: 9, color: theme.muted });
+      } else {
+        w.signatureBlock([{ name: officer.fullName, capacity: roles }]);
+      }
     });
+
+    if (sig) {
+      w.doc.addPage();
+      w.title("Signature audit trail", `Request ${sig.requestId}`);
+      w.keyValue([
+        ["Signer", officers[0]!.fullName],
+        ["Email", sig.email],
+        ["Typed signature", sig.signedName],
+        ["Signed at (UTC)", new Date(sig.signedAt).toISOString()],
+        ["IP address", sig.ip ?? "not recorded"],
+        ["User agent", sig.userAgent ?? "not recorded"],
+        ["Document SHA-256", sig.documentHash],
+      ]);
+      w.note(
+        "The signer opened a unique link sent to the email address above, reviewed the consent document identified by the SHA-256 hash, typed their full name and confirmed their intention to sign electronically.",
+      );
+    }
   });
 }

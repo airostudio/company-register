@@ -135,7 +135,8 @@ const identityCode = z
 export const officerSchema = z.object({
   id: z.string().min(1),
   fullName: z.string().trim().min(2, "Enter the person's full legal name").max(120),
-  email: optionalEmail,
+  /** Required: each officer e-signs their consent to act via a link sent here. */
+  email: z.email("Enter an email address — we send the consent to sign here"),
   roles: z.array(z.enum(OFFICER_ROLES)).min(1, "Select at least one role"),
   dateOfBirth: isoDate,
   placeOfBirth: z.string().optional(),

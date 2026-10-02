@@ -4,6 +4,7 @@
  */
 import Stripe from "stripe";
 import { buildApplication } from "@/test/fixtures";
+import { signAll, uniqueOfficerEmails } from "./e2e-helpers";
 const BASE = process.env.BASE_URL ?? "http://localhost:3002";
 const FAKE = "http://localhost:12111";
 const stripe = new Stripe("sk_test_fake");
@@ -36,6 +37,7 @@ const check = (label: string, ok: boolean, extra = "") => { console.log(`${ok ? 
   // A: one-time payment via webhook
   const a = buildApplication("AU", "AU_PTY_LTD", `Stripe Pay ${Date.now().toString(36)}`);
   a.review.contactEmail = `stripe-a-${Date.now()}@example.com`;
+  uniqueOfficerEmails(a, "stripe-a");
   const created = await api("/api/formations", { method: "POST", body: JSON.stringify(a) });
   check("formation returns Stripe checkout URL", created.status === 201 && /checkout\.stripe\.test/.test(created.body.checkoutUrl), created.body.checkoutUrl);
   const f1 = await api(`/api/filings/${created.body.filingId}`);
@@ -50,16 +52,21 @@ const check = (label: string, ok: boolean, extra = "") => { console.log(`${ok ? 
   const paid = await (await fetch(`${FAKE}/__pay/${sessionId}`, { method: "POST" })).json();
   check("webhook accepted", (await webhook("checkout.session.completed", paid)) === 200);
   check("duplicate webhook is harmless", (await webhook("checkout.session.completed", paid)) === 200);
-  const done = await waitFor(created.body.filingId, (v) => v.status === "APPROVED" && v.documents.length > 0);
+  const awaiting = await api(`/api/filings/${created.body.filingId}`);
+  check("paid filing waits for signatures", awaiting.body.status === "AWAITING_SIGNATURES" && awaiting.body.signatures.length === 1);
+  await signAll(BASE, a);
+  const done = await waitFor(created.body.filingId, (v) => v.status === "APPROVED" && v.packReady);
   const events = done.events.map((e: any) => e.status).join(" → ");
   check("paid filing lodged and approved", done.payment.status === "PAID", events);
   check("only one QUEUED transition", done.events.filter((e: any) => e.status === "QUEUED").length === 1);
+  check("paid → awaiting signatures → queued", events.startsWith("DRAFT → AWAITING_SIGNATURES"), events);
 
   // B: subscription via return-URL confirmation, then renewal/cancel webhooks
   cookie = "";
   const b = buildApplication("US_WY", "US_LLC", `Stripe Sub ${Date.now().toString(36)}`);
   b.addons.plan = "COMPLIANCE_ESSENTIALS";
   b.review.contactEmail = `stripe-b-${Date.now()}@example.com`;
+  uniqueOfficerEmails(b, "stripe-b");
   const cb = await api("/api/formations", { method: "POST", body: JSON.stringify(b) });
   const sid = cb.body.checkoutUrl.split("/").pop();
   const callsB = await (await fetch(`${FAKE}/__calls`)).json();
@@ -70,7 +77,9 @@ const check = (label: string, ok: boolean, extra = "") => { console.log(`${ok ? 
   await fetch(`${FAKE}/__pay/${sid}`, { method: "POST" });
   const conf = await api(`/api/payments/confirm?session_id=${sid}`);
   check("confirm after paying settles order", conf.body.paid === true);
-  await waitFor(cb.body.filingId, (v) => v.status !== "DRAFT");
+  await waitFor(cb.body.filingId, (v) => v.status === "AWAITING_SIGNATURES");
+  await signAll(BASE, b);
+  await waitFor(cb.body.filingId, (v) => !["DRAFT", "AWAITING_SIGNATURES"].includes(v.status));
   const other = await fetch(`${BASE}/api/payments/confirm?session_id=${sid}`, { headers: { cookie: "gch_session=nope" } });
   check("confirm requires the owner", other.status === 401);
   const subId = `sub_${sid}`;

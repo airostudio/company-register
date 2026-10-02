@@ -57,7 +57,8 @@ enum FilingType {
 
 enum FilingStatus {
   DRAFT
-  QUEUED           // Paid, waiting for the background job to lodge it
+  AWAITING_SIGNATURES // Paid; waiting for officers to e-sign their consents
+  QUEUED           // Paid and signed, waiting for the background job to lodge it
   SUBMITTED        // Accepted by the registry gateway, reference issued
   UNDER_REVIEW     // Examiner review in progress
   REQUIRES_ACTION  // Registry requisition — customer must fix something
@@ -298,6 +299,43 @@ model BeneficialOwner {
 
 // ─── Filings & registry integration ─────────────────────────────────────────
 
+enum SignatureStatus {
+  PENDING
+  SIGNED
+  DECLINED
+  EXPIRED
+}
+
+// An officer's electronic signature on their consent to act. The audit
+// fields (document hash, IP, user agent, time) make up the evidence trail.
+model SignatureRequest {
+  id              String          @id @default(cuid())
+  filingId        String
+  filing          Filing          @relation(fields: [filingId], references: [id], onDelete: Cascade)
+  companyId       String
+  officerId       String
+  signerName      String
+  signerEmail     String
+  roles           OfficerRole[]
+  documentType    DocumentType    @default(CONSENT_TO_ACT)
+  status          SignatureStatus @default(PENDING)
+  tokenHash       String          @unique // Hash of the emailed link token
+  documentKey     String          // Storage key of the exact PDF shown to the signer
+  documentHash    String          // SHA-256 of that PDF
+  signedName      String?
+  signedAt        DateTime?
+  signedIp        String?
+  signedUserAgent String?
+  declinedReason  String?
+  signedDocumentId String?        // Document row of the signed PDF
+  sentAt          DateTime        @default(now())
+  expiresAt       DateTime
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([filingId])
+}
+
 model Filing {
   id                String       @id @default(cuid())
   companyId         String
@@ -327,6 +365,7 @@ model Filing {
   events            FilingEvent[]
   documents         Document[]
   order             Order?
+  signatures        SignatureRequest[]
 
   @@index([companyId])
   @@index([status])
@@ -365,6 +404,7 @@ model Document {
 
   @@index([companyId, type])
 }
+// Document.source: GENERATED | REGISTRY | SIGNED (e-signed by an officer) | UPLOADED
 
 // ─── Commerce ───────────────────────────────────────────────────────────────
 
