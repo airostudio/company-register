@@ -146,7 +146,7 @@ export function filingStatusToCompanyStatus(status: FilingStatus): CompanyStatus
 }
 
 export const FILING_STATUS_LABELS: Record<FilingStatus, string> = {
-  DRAFT: "Draft",
+  DRAFT: "Awaiting payment",
   QUEUED: "Queued for lodgement",
   SUBMITTED: "Submitted to registry",
   UNDER_REVIEW: "Under review",

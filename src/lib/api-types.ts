@@ -14,6 +14,8 @@ export interface CreateFormationResponse {
   companyId: string;
   filingId: string;
   quote: Quote;
+  /** Present when Stripe is configured: redirect the customer here to pay. */
+  checkoutUrl?: string;
 }
 
 export interface FilingView {
@@ -35,6 +37,7 @@ export interface FilingView {
   };
   events: { id: string; status: FilingStatus; message: string; createdAt: string }[];
   documents: { id: string; type: DocumentType; title: string; source: string }[];
+  payment: { status: "PENDING" | "PAID" | "EXPIRED" | "REFUNDED"; amount: number; currency: string } | null;
   settled: boolean;
 }
 

@@ -138,6 +138,7 @@ model User {
   countryCode     String?        // ISO-3166 alpha-2, drives non-resident founder flows
   role            UserRole       @default(CUSTOMER)
   emailVerifiedAt DateTime?      // Set when the user first signs in through a magic link
+  stripeCustomerId String?       @unique
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
   companies       Company[]
@@ -367,13 +368,21 @@ model Document {
 
 // ─── Commerce ───────────────────────────────────────────────────────────────
 
+enum OrderStatus {
+  PENDING  // Awaiting payment (Stripe Checkout open or not started)
+  PAID
+  EXPIRED  // Checkout session expired unpaid — customer can start a new one
+  REFUNDED
+}
+
 model Order {
-  id                 String   @id @default(cuid())
+  id                 String      @id @default(cuid())
   companyId          String
-  company            Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  filingId           String?  @unique
-  filing             Filing?  @relation(fields: [filingId], references: [id], onDelete: SetNull)
-  currency           String   // ISO-4217
+  company            Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  filingId           String?     @unique
+  filing             Filing?     @relation(fields: [filingId], references: [id], onDelete: SetNull)
+  status             OrderStatus @default(PENDING)
+  currency           String      // ISO-4217
   // Amounts in minor units (cents/pence). Government fees are pass-through and
   // always reported separately from platform service fees.
   governmentFeeTotal Int
@@ -381,11 +390,14 @@ model Order {
   addOnTotal         Int
   taxTotal           Int
   grandTotal         Int
-  lineItems          Json     // QuoteLineItem[] from src/lib/pricing
-  paymentProvider    String?
-  paymentReference   String?
+  lineItems          Json        // QuoteLineItem[] from src/lib/pricing
+  paymentProvider    String?     // stripe | mock
+  paymentReference   String?     // PaymentIntent / Invoice ID
+  checkoutSessionId  String?     @unique
+  checkoutUrl        String?
   paidAt             DateTime?
-  createdAt          DateTime @default(now())
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
 }
 
 model Subscription {

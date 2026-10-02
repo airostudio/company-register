@@ -2,7 +2,7 @@
   "name": "globalcorp-hub",
   "version": "0.1.0",
   "private": true,
-  "description": "GlobalCorp Hub \u2014 multi-jurisdiction business formation platform",
+  "description": "GlobalCorp Hub — multi-jurisdiction business formation platform",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -42,6 +42,7 @@
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "react-hook-form": "^7.88.0",
+    "stripe": "^23.0.0",
     "tailwind-merge": "^3.7.0",
     "zod": "^4.6.5",
     "zustand": "^5.0.15"

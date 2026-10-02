@@ -3,6 +3,8 @@ import type { FilingView } from "@/lib/api-types";
 import { errorResponse } from "@/server/errors";
 import { fulfilApprovedFiling, lodgeFiling, syncFilingStatus } from "@/server/formations/lodgement";
 import { jobRunner } from "@/server/jobs/client";
+import { db } from "@/server/db";
+import { repairPaidOrder } from "@/server/payments";
 import { getFilingView } from "@/server/queries";
 import { getSessionUserId } from "@/server/session";
 
@@ -18,6 +20,13 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
   try {
     let view = await getFilingView(id, userId);
     if (!view) return NextResponse.json({ error: { code: "NOT_FOUND", message: "Filing not found" } }, { status: 404 });
+
+    // A paid order whose filing never left DRAFT (e.g. a crash mid-webhook) is repaired here.
+    if (view.status === "DRAFT" && view.payment?.status === "PAID") {
+      const order = await db().order.findUnique({ where: { filingId: view.id } });
+      if (order) await repairPaidOrder(order.id);
+      view = (await getFilingView(id, userId))!;
+    }
 
     // Without a background runner, advance the filing when someone is watching it.
     if (jobRunner() === "inline" && (await advanceInline(view))) {

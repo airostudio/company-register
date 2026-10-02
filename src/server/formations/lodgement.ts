@@ -34,7 +34,7 @@ export interface SyncResult {
  * Compare-and-set status transition: only applies if the filing is still in
  * `from`, so two concurrent pollers can't both record the same transition.
  */
-async function transition(
+export async function transition(
   filing: Pick<Filing, "id" | "companyId">,
   from: FilingStatus,
   to: FilingStatus,

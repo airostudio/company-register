@@ -2,7 +2,6 @@ import { Prisma } from "@prisma/client";
 import { getEntityProfile } from "@/lib/jurisdictions";
 import { ADDRESS_SERVICE_PROVIDERS } from "@/lib/jurisdictions/service-providers";
 import { calculateQuote, resolveAddOns, type Quote } from "@/lib/pricing/quote";
-import { PLANS } from "@/lib/pricing/catalog";
 import { buildFormationPayload, getRegistryAdapter } from "@/lib/registry";
 import { fullCompanyName, summarizeOwnership, type FormationApplication } from "@/lib/validation/formation";
 import { db, toJson } from "../db";
@@ -14,6 +13,7 @@ export interface CreatedFormation {
   newUser: boolean;
   companyId: string;
   filingId: string;
+  orderId: string;
   quote: Quote;
 }
 
@@ -116,10 +116,10 @@ export async function createFormation(app: FormationApplication, sessionUserId?:
       data: {
         companyId: company.id,
         type: "INCORPORATION",
-        status: "QUEUED",
+        status: "DRAFT",
         jurisdiction,
         expedited: addOns.includes("EXPEDITED"),
-        events: { create: { status: "QUEUED", message: "Payment received — queued for lodgement." } },
+        events: { create: { status: "DRAFT", message: "Application saved — awaiting payment." } },
       },
     });
     await tx.filing.update({
@@ -127,7 +127,7 @@ export async function createFormation(app: FormationApplication, sessionUserId?:
       data: { requestPayload: toJson(buildFormationPayload(app, filing.id)) },
     });
 
-    await tx.order.create({
+    const order = await tx.order.create({
       data: {
         companyId: company.id,
         filingId: filing.id,
@@ -138,31 +138,12 @@ export async function createFormation(app: FormationApplication, sessionUserId?:
         taxTotal: quote.totals.tax,
         grandTotal: quote.totals.dueToday,
         lineItems: toJson(quote.lineItems),
-        // Payments are mocked in this scaffold; wire Stripe Checkout here.
-        paymentProvider: "mock",
-        paymentReference: `mock_${filing.id}`,
-        paidAt: new Date(),
+        status: "PENDING",
       },
     });
 
-    if (app.addons.plan !== "PAY_AS_YOU_GO") {
-      const now = new Date();
-      const end = new Date(now);
-      end.setUTCFullYear(end.getUTCFullYear() + 1);
-      await tx.subscription.create({
-        data: {
-          userId: user.id,
-          companyId: company.id,
-          plan: app.addons.plan,
-          status: "ACTIVE",
-          includesRegisteredAgent: PLANS[app.addons.plan].includes.includes("REGISTERED_AGENT"),
-          currentPeriodStart: now,
-          currentPeriodEnd: end,
-        },
-      });
-    }
-
-    return { userId: user.id, newUser, companyId: company.id, filingId: filing.id, quote };
+    // Payment (Stripe Checkout or the mock provider) moves the filing to QUEUED — see src/server/payments.
+    return { userId: user.id, newUser, companyId: company.id, filingId: filing.id, orderId: order.id, quote };
   });
 }
 

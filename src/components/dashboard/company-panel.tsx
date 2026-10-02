@@ -136,10 +136,23 @@ export function CompanyPanel({ company, filing }: { company: DashboardCompany; f
 
           <TabsContent value="compliance" className="space-y-3">
             {plan ? (
-              <p className="text-sm text-muted-foreground">
-                Covered by <strong className="text-foreground">{plan.name}</strong> — we&apos;ll prepare and lodge these for you. Renews{" "}
-                {formatDate(company.subscription!.currentPeriodEnd)}.
-              </p>
+              <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
+                <p>
+                  Covered by <strong className="text-foreground">{plan.name}</strong> — we&apos;ll prepare and lodge these for you.{" "}
+                  {company.subscription!.status === "PAST_DUE"
+                    ? "Your last renewal payment failed — update your card to keep cover."
+                    : company.subscription!.cancelAtPeriodEnd
+                      ? `Cancels on ${formatDate(company.subscription!.currentPeriodEnd)}.`
+                      : `Renews ${formatDate(company.subscription!.currentPeriodEnd)}.`}
+                </p>
+                {company.subscription!.externalId && (
+                  <form action="/api/billing/portal" method="post">
+                    <Button type="submit" variant="outline" size="sm">
+                      Manage billing
+                    </Button>
+                  </form>
+                )}
+              </div>
             ) : (
               <p className="text-sm text-muted-foreground">We&apos;ll email reminders before each deadline. Upgrade to have them lodged for you.</p>
             )}

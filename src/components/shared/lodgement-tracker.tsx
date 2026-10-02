@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AlertTriangle, CheckCircle2, Circle, FileText, Loader2, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Circle, CreditCard, FileText, Loader2, XCircle } from "lucide-react";
 import type { FilingView } from "@/lib/api-types";
-import { FILING_STATUS_LABELS, LIFECYCLE_LABELS, LIFECYCLE_STAGES, filingStatusToLifecycle } from "@/lib/domain";
+import { FILING_STATUS_LABELS, LIFECYCLE_LABELS, LIFECYCLE_STAGES, filingStatusToLifecycle, type Currency } from "@/lib/domain";
 import { getJurisdiction } from "@/lib/jurisdictions";
-import { cn, formatDate } from "@/lib/utils";
+import { cn, formatDate, formatMoney } from "@/lib/utils";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -57,7 +57,7 @@ export function LodgementTracker({ filingId, initial, compact }: { filingId: str
   const stageIndex = LIFECYCLE_STAGES.indexOf(stage);
   const failed = view.status === "REJECTED" || view.status === "FAILED";
   const needsAction = view.status === "REQUIRES_ACTION";
-  const inFlight = !view.settled;
+  const inFlight = !view.settled && view.status !== "DRAFT"; // DRAFT waits on payment, not the registry
 
   return (
     <div className="space-y-5">
@@ -90,6 +90,16 @@ export function LodgementTracker({ filingId, initial, compact }: { filingId: str
         </ol>
       </div>
 
+      {view.status === "DRAFT" && view.payment && view.payment.status !== "PAID" && (
+        <Alert variant="warning">
+          <CreditCard />
+          <AlertTitle>Awaiting payment</AlertTitle>
+          <AlertDescription>
+            <p>We&apos;ll lodge with {profile.registry.code} as soon as payment of {formatMoney(view.payment.amount, view.payment.currency as Currency)} is complete.</p>
+            <PayButton filingId={view.id} />
+          </AlertDescription>
+        </Alert>
+      )}
       {view.status === "APPROVED" && (
         <Alert variant="success">
           <CheckCircle2 />
@@ -151,6 +161,28 @@ export function LodgementTracker({ filingId, initial, compact }: { filingId: str
         </div>
       )}
       {error && <p className="text-xs text-destructive">Connection issue: {error}. Retrying…</p>}
+    </div>
+  );
+}
+
+function PayButton({ filingId }: { filingId: string }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+  const pay = async () => {
+    setBusy(true);
+    setError(undefined);
+    const res = await fetch(`/api/filings/${filingId}/checkout`, { method: "POST" });
+    const body = await res.json().catch(() => null);
+    if (res.ok && body?.checkoutUrl) return window.location.assign(body.checkoutUrl);
+    if (!res.ok) setError(body?.error?.message ?? "Couldn't start checkout");
+    setBusy(false);
+  };
+  return (
+    <div className="mt-2 space-y-1">
+      <Button size="sm" onClick={pay} disabled={busy}>
+        {busy ? <Loader2 className="animate-spin" /> : <CreditCard />} Complete payment
+      </Button>
+      {error && <p className="text-xs text-destructive">{error}</p>}
     </div>
   );
 }

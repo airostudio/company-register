@@ -9,6 +9,7 @@ export async function getFilingView(filingId: string, ownerId: string): Promise<
     where: { id: filingId, company: { ownerId } },
     include: {
       company: true,
+      order: true,
       events: { orderBy: { createdAt: "asc" } },
       documents: { orderBy: { createdAt: "asc" }, select: { id: true, type: true, title: true, source: true } },
     },
@@ -33,6 +34,7 @@ export async function getFilingView(filingId: string, ownerId: string): Promise<
     },
     events: filing.events.map((e) => ({ id: e.id, status: e.status, message: e.message, createdAt: e.createdAt.toISOString() })),
     documents: filing.documents,
+    payment: filing.order ? { status: filing.order.status, amount: filing.order.grandTotal, currency: filing.order.currency } : null,
     settled: isSettled(filing.status),
   };
 }

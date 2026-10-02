@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { CreditCard, LayoutDashboard, Loader2, Lock, RotateCcw, XCircle } from "lucide-react";
 import type { ApiErrorBody, CreateFormationResponse } from "@/lib/api-types";
@@ -26,18 +26,26 @@ export function CheckoutStep() {
   const { draft, phase, submission, submitError } = useWizardStore();
   const [issues, setIssues] = useState<Issue[]>([]);
   const [errorCode, setErrorCode] = useState<string>();
+  const returnState = useCheckoutReturn();
 
   if (phase === "submitted" && submission) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle className="text-xl">Lodgement in progress</CardTitle>
+          <CardTitle className="text-xl">Your application</CardTitle>
           <CardDescription>
-            We&apos;ve lodged your application. This page updates live — you can also close it and follow along from your dashboard.
+            This page updates live — you can also close it and follow along from your dashboard.
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <LodgementTracker filingId={submission.filingId} />
+        <CardContent className="space-y-4">
+          {returnState === "cancelled" && (
+            <Alert variant="warning">
+              <XCircle />
+              <AlertTitle>Payment cancelled</AlertTitle>
+              <AlertDescription>Your application is saved. Complete payment whenever you&apos;re ready and we&apos;ll lodge it straight away.</AlertDescription>
+            </Alert>
+          )}
+          <LodgementTracker key={returnState} filingId={submission.filingId} />
         </CardContent>
         <CardFooter className="flex-wrap justify-between gap-2 border-t pt-5">
           <Button variant="ghost" onClick={() => dispatch({ type: "RESET" })}>
@@ -94,6 +102,7 @@ export function CheckoutStep() {
         type: "SUBMIT_SUCCEEDED",
         submission: { companyId: body.companyId, filingId: body.filingId, submittedAt: new Date().toISOString() },
       });
+      if (body.checkoutUrl) window.location.assign(body.checkoutUrl);
     } catch {
       dispatch({ type: "SUBMIT_FAILED", error: "Network error — check your connection and try again." });
     }
@@ -151,7 +160,7 @@ export function CheckoutStep() {
             <CreditCard className="size-4" /> Payment
           </p>
           <p className="text-sm text-muted-foreground">
-            Test mode — no card is charged. Stripe Checkout plugs in at <code className="text-xs">src/server/formations/create.ts</code>.
+            You&apos;ll pay securely with Stripe. Government fees are passed through at cost and itemised on your receipt.
           </p>
         </div>
       </CardContent>
@@ -166,4 +175,25 @@ export function CheckoutStep() {
       </CardFooter>
     </Card>
   );
+}
+
+/**
+ * Handle the return from Stripe Checkout (?checkout=success&session_id=… or ?checkout=cancelled):
+ * confirm the session server-side in case the webhook hasn't arrived, then clean the URL.
+ */
+function useCheckoutReturn(): "none" | "success" | "cancelled" {
+  const [state, setState] = useState<"none" | "success" | "cancelled">("none");
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const outcome = params.get("checkout");
+    if (outcome !== "success" && outcome !== "cancelled") return;
+    window.history.replaceState(null, "", window.location.pathname);
+    const sessionId = params.get("session_id");
+    if (outcome === "success" && sessionId) {
+      void fetch(`/api/payments/confirm?session_id=${encodeURIComponent(sessionId)}`).finally(() => setState("success"));
+    } else {
+      setState(outcome);
+    }
+  }, []);
+  return state;
 }
