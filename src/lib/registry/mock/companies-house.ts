@@ -34,15 +34,6 @@ export class MockCompaniesHouseAdapter extends MockRegistryAdapter {
     { name: "Highland Distillers Ltd", number: "SC000005" },
   ];
 
-  protected readonly restrictedWords = [
-    { word: "royal", reason: "is a sensitive word that needs Cabinet Office consent." },
-    { word: "british", reason: "is a sensitive word that implies national pre-eminence." },
-    { word: "national", reason: "is a sensitive word that implies national pre-eminence." },
-    { word: "bank", reason: "requires consent from the Prudential Regulation Authority." },
-    { word: "charity", reason: "requires Charity Commission consent." },
-    { word: "university", reason: "requires Department for Education consent." },
-    { word: "government", reason: "implies a connection with government." },
-  ];
 
   protected validateLodgement(payload: FormationPayload): RegistryIssue[] {
     const issues: RegistryIssue[] = [];

@@ -68,3 +68,4 @@ export async function generateDocumentPack(ctx: DocumentContext): Promise<Genera
 
   return Promise.all(jobs);
 }
+export { renderLodgementPack } from "./templates/lodgement-pack";

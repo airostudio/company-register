@@ -311,6 +311,24 @@ function OfficerCard({ index, ctx, onRemove }: { index: number; ctx: Ctx; onRemo
             )}
           />
         )}
+        {isDirector && ctx.jurisdiction === "UK" && (
+          <FormField
+            control={form.control}
+            name={`officers.${index}.identityVerificationCode`}
+            render={({ field }) => (
+              <FormItem>
+                <div className="flex items-center justify-between">
+                  <FormLabel>Companies House personal code (if you have it)</FormLabel>
+                  <HelpTip topic="personalCode" jurisdiction="UK" />
+                </div>
+                <FormControl>
+                  <Input autoComplete="off" placeholder="e.g. ABC12345DEF" {...field} value={field.value ?? ""} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        )}
       </div>
 
       <div className="space-y-2">
@@ -746,6 +764,24 @@ function BeneficialOwnersTab({ ctx }: { ctx: Ctx }) {
               )}
             />
             <NationalityField name={`beneficialOwners.${index}.nationality`} />
+            {ctx.jurisdiction === "UK" && (
+              <FormField
+                control={form.control}
+                name={`beneficialOwners.${index}.identityVerificationCode`}
+                render={({ field: f }) => (
+                  <FormItem>
+                    <div className="flex items-center justify-between">
+                      <FormLabel>Companies House personal code (if you have it)</FormLabel>
+                      <HelpTip topic="personalCode" jurisdiction="UK" />
+                    </div>
+                    <FormControl>
+                      <Input autoComplete="off" {...f} value={f.value ?? ""} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
           </div>
           <FormField
             control={form.control}

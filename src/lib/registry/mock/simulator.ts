@@ -1,12 +1,6 @@
 import type { Jurisdiction } from "@/lib/domain";
-import { composeCompanyName, getJurisdiction } from "@/lib/jurisdictions";
-import {
-  COMPANY_NAME_CHARS,
-  LEGAL_ENDING_REGEX,
-  nameSimilarity,
-  normalizeCompanyName,
-  stripLegalEnding,
-} from "@/lib/names";
+import { evaluateName, type RegisterEntry } from "../name-evaluation";
+import { RESTRICTED_WORDS } from "../restricted-words";
 import {
   RegistryError,
   type FilingReceipt,
@@ -15,7 +9,6 @@ import {
   type IGovernmentRegistryAdapter,
   type NameAvailabilityResult,
   type NameCheckOptions,
-  type NameIssue,
   type OfficialDocument,
   type RegistryIssue,
 } from "../types";
@@ -91,8 +84,6 @@ export abstract class MockRegistryAdapter implements IGovernmentRegistryAdapter 
   protected abstract readonly timeline: MockTimeline;
   /** Names already on the (simulated) register. */
   protected abstract readonly takenNames: readonly { name: string; number: string }[];
-  /** Words that need regulator consent (warning only). */
-  protected abstract readonly restrictedWords: readonly { word: string; reason: string }[];
 
   /** Jurisdiction-specific business rules the registry enforces on lodgement. */
   protected abstract validateLodgement(payload: FormationPayload): RegistryIssue[];
@@ -124,84 +115,19 @@ export abstract class MockRegistryAdapter implements IGovernmentRegistryAdapter 
   ): Promise<NameAvailabilityResult> {
     this.assertJurisdiction(jurisdiction);
     await sleep(this.timeline.nameSearchLatencyMs * this.speed);
-
-    const query = name.trim().replace(/\s+/g, " ");
-    const normalizedName = normalizeCompanyName(query);
-    const issues: NameIssue[] = [];
-    const base = stripLegalEnding(query);
-
-    if (!COMPANY_NAME_CHARS.test(query)) {
-      issues.push({ code: "INVALID_CHARACTERS", severity: "error", message: "The name contains characters the registry doesn't accept." });
-    }
-    if (base.length < 2 || normalizedName.length < 2) {
-      issues.push({ code: "TOO_SHORT", severity: "error", message: "The distinctive part of the name is too short." });
-    }
-    if (!LEGAL_ENDING_REGEX.test(query)) {
-      issues.push({ code: "MISSING_LEGAL_ENDING", severity: "warning", message: "The name needs a legal ending such as Ltd, LLC or Inc." });
-    }
-
-    const conflicts = this.register()
-      .map((entry) => ({ name: entry.name, registryNumber: entry.number, similarity: nameSimilarity(entry.name, query) }))
-      .filter((c) => c.similarity >= 0.82)
-      .sort((a, b) => b.similarity - a.similarity)
-      .slice(0, 5)
-      .map((c) => ({ ...c, similarity: Math.round(c.similarity * 100) / 100 }));
-
-    const identical = conflicts.find((c) => c.similarity === 1);
-    if (identical) {
-      issues.push({ code: "IDENTICAL_NAME", severity: "error", message: `"${identical.name}" is already registered (${identical.registryNumber}).` });
-    } else if (conflicts.length) {
-      issues.push({ code: "SIMILAR_NAME", severity: "warning", message: "Similar names are registered. You can proceed, but the registry may query it." });
-    }
-
-    for (const { word, reason } of this.restrictedWords) {
-      if (new RegExp(`\\b${word}\\b`, "i").test(base)) {
-        issues.push({ code: "RESTRICTED_WORD", severity: "warning", message: `"${word}" is a restricted word: ${reason}` });
-      }
-    }
-
-    const hasError = issues.some((i) => i.severity === "error");
-    const status = issues.some((i) => i.code === "INVALID_CHARACTERS" || i.code === "TOO_SHORT")
-      ? "INVALID"
-      : hasError
-        ? "UNAVAILABLE"
-        : "AVAILABLE";
-
-    let suggestions: string[] = [];
-    if (status === "UNAVAILABLE" && options.suggest !== false) {
-      suggestions = await this.suggestAlternatives(base, jurisdiction, query);
-    }
-
-    return {
-      query,
-      normalizedName,
+    return evaluateName({
+      query: name,
       jurisdiction,
-      registry: this.registryCode,
-      status,
-      available: status === "AVAILABLE",
-      issues,
-      conflicts,
-      suggestions,
-      checkedAt: new Date(this.now()).toISOString(),
-    };
-  }
-
-  private async suggestAlternatives(base: string, jurisdiction: Jurisdiction, query: string): Promise<string[]> {
-    const ending = LEGAL_ENDING_REGEX.exec(query)?.[1] ?? getJurisdiction(jurisdiction).entityTypes[0]!.suffixes[0]!;
-    const region = getJurisdiction(jurisdiction).shortName.split(" ")[0];
-    const modifiers = ["Group", "Holdings", "Global", "Labs", "Ventures", region, "Collective", "Studio"];
-    const candidates = modifiers.map((m) => composeCompanyName(`${base} ${m}`, ending));
-    const available: string[] = [];
-    for (const candidate of candidates) {
-      if (available.length >= 4) break;
-      const clash = this.register().some((e) => nameSimilarity(e.name, candidate) === 1);
-      if (!clash) available.push(candidate);
-    }
-    return available;
+      registryCode: this.registryCode,
+      register: this.register(),
+      restrictedWords: RESTRICTED_WORDS[jurisdiction],
+      suggest: options.suggest !== false,
+      now: new Date(this.now()),
+    });
   }
 
   /** Static register plus everything lodged with this simulator in the current process. */
-  private register(): { name: string; number: string }[] {
+  private register(): RegisterEntry[] {
     const lodged = [...store().entries()]
       .filter(([, f]) => this.jurisdictions.includes(f.payload.jurisdiction))
       .map(([id, f]) => ({ name: f.payload.companyName, number: `pending ${id}` }));
@@ -334,6 +260,15 @@ export abstract class MockRegistryAdapter implements IGovernmentRegistryAdapter 
           },
         };
       }
+    }
+  }
+
+  ownsReference(reference: string): boolean {
+    try {
+      this.parseFilingId(reference);
+      return true;
+    } catch {
+      return false;
     }
   }
 

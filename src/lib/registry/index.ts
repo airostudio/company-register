@@ -4,6 +4,7 @@ import { MockAsicAdapter } from "./mock/asic";
 import { MockCompaniesHouseAdapter } from "./mock/companies-house";
 import type { MockAdapterOptions } from "./mock/simulator";
 import { MockUsSecretaryOfStateAdapter } from "./mock/us-sos";
+import { createLiveAdapters } from "@/server/registry/live";
 import { RegistryError, type IGovernmentRegistryAdapter, type NameAvailabilityResult } from "./types";
 
 export * from "./types";
@@ -17,45 +18,44 @@ function envNumber(name: string, fallback: number): number {
   return Number.isFinite(n) ? n : fallback;
 }
 
-function mockOptions(): MockAdapterOptions {
-  return {
+/** REGISTRY_MODE_<JURISDICTION> (e.g. REGISTRY_MODE_UK=live) overrides REGISTRY_MODE (default "mock"). */
+export function registryMode(jurisdiction: Jurisdiction): RegistryMode {
+  const value = process.env[`REGISTRY_MODE_${jurisdiction}`] ?? process.env.REGISTRY_MODE ?? "mock";
+  return value === "live" ? "live" : "mock";
+}
+
+let mockAdapters: IGovernmentRegistryAdapter[] | undefined;
+let liveAdapters: IGovernmentRegistryAdapter[] | undefined;
+
+function mocks(): IGovernmentRegistryAdapter[] {
+  const opts: MockAdapterOptions = {
     speed: envNumber("MOCK_REGISTRY_SPEED", 1),
     failureRate: envNumber("MOCK_REGISTRY_FAILURE_RATE", 0),
   };
+  mockAdapters ??= [new MockAsicAdapter(opts), new MockUsSecretaryOfStateAdapter(opts), new MockCompaniesHouseAdapter(opts)];
+  return mockAdapters;
 }
 
-/**
- * Adapter factory. Live adapters (ASIC EDGE, Delaware ICIS, Companies House
- * XML Gateway) slot in here behind the same interface; until they exist the
- * "live" mode fails loudly rather than silently falling back to a mock.
- */
-function createAdapters(mode: RegistryMode): IGovernmentRegistryAdapter[] {
-  if (mode === "live") {
-    throw new Error("Live registry adapters are not implemented yet — set REGISTRY_MODE=mock");
-  }
-  const opts = mockOptions();
-  return [new MockAsicAdapter(opts), new MockUsSecretaryOfStateAdapter(opts), new MockCompaniesHouseAdapter(opts)];
-}
-
-let cached: { mode: RegistryMode; adapters: IGovernmentRegistryAdapter[] } | undefined;
-
-function adapters(): IGovernmentRegistryAdapter[] {
-  const mode = (process.env.REGISTRY_MODE as RegistryMode | undefined) ?? "mock";
-  if (!cached || cached.mode !== mode) cached = { mode, adapters: createAdapters(mode) };
-  return cached.adapters;
+function lives(): IGovernmentRegistryAdapter[] {
+  liveAdapters ??= createLiveAdapters();
+  return liveAdapters;
 }
 
 export function getRegistryAdapter(jurisdiction: Jurisdiction): IGovernmentRegistryAdapter {
-  const adapter = adapters().find((a) => a.jurisdictions.includes(jurisdiction));
+  const pool = registryMode(jurisdiction) === "live" ? lives() : mocks();
+  const adapter = pool.find((a) => a.jurisdictions.includes(jurisdiction));
   if (!adapter) {
     throw new RegistryError("GATEWAY", "UNSUPPORTED_JURISDICTION", `No registry adapter for ${jurisdiction}`);
   }
   return adapter;
 }
 
-/** Resolve the adapter that issued a registry reference (e.g. "ASIC-AU-…"). */
+/**
+ * Resolve the adapter that issued a registry reference. References are
+ * self-describing, so filings lodged before a mode switch still resolve.
+ */
 export function getRegistryAdapterForReference(reference: string): IGovernmentRegistryAdapter {
-  const adapter = adapters().find((a) => reference.startsWith(`${a.registryCode}-`));
+  const adapter = [...lives(), ...mocks()].find((a) => a.ownsReference(reference));
   if (!adapter) throw new RegistryError("GATEWAY", "NOT_FOUND", `Unrecognised registry reference ${reference}`);
   return adapter;
 }

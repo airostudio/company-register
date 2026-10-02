@@ -47,6 +47,7 @@ export function buildFormationPayload(app: FormationApplication, clientReference
       nationality: o.nationality || undefined,
       residentialAddress: o.residentialAddress,
       directorId: o.directorId?.replace(/\s/g, "") || undefined,
+      identityVerificationCode: o.identityVerificationCode?.toUpperCase() || undefined,
     })),
     shareCapital: { totalUnits: people.totalUnits, kind: entity.ownership.kind },
     shareholders: people.shareholders.map((s) => ({
@@ -65,6 +66,7 @@ export function buildFormationPayload(app: FormationApplication, clientReference
       residentialAddress: b.residentialAddress,
       ownershipPercent: b.ownershipPercent,
       natureOfControl: b.natureOfControl,
+      identityVerificationCode: b.identityVerificationCode?.toUpperCase() || undefined,
     })),
     noBeneficialOwnersStatement: people.noBeneficialOwners,
     expedited: addOns.includes("EXPEDITED"),

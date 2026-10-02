@@ -128,6 +128,9 @@ export type DetailsStep = z.infer<ReturnType<typeof createDetailsStepSchema>>;
 
 const optionalEmail = z.union([z.literal(""), z.email("Enter a valid email address")]).optional();
 const isoDate = z.union([z.literal(""), z.iso.date("Use the format YYYY-MM-DD")]).optional();
+const identityCode = z
+  .union([z.literal(""), z.string().trim().regex(/^[A-Za-z0-9]{8,15}$/, "Enter the personal code exactly as Companies House issued it")])
+  .optional();
 
 export const officerSchema = z.object({
   id: z.string().min(1),
@@ -139,6 +142,8 @@ export const officerSchema = z.object({
   nationality: z.string().optional(),
   residentialAddress: addressSchema,
   directorId: z.string().optional(),
+  /** UK: Companies House identity-verification personal code (directors, since Nov 2025). */
+  identityVerificationCode: identityCode,
   consentToAct: z.boolean(),
 });
 export type OfficerInput = z.infer<typeof officerSchema>;
@@ -164,6 +169,7 @@ export const beneficialOwnerSchema = z.object({
   nationality: z.string().optional(),
   residentialAddress: addressSchema,
   ownershipPercent: z.number({ error: "Enter a percentage" }).min(0).max(100, "Can't exceed 100%"),
+  identityVerificationCode: identityCode,
   natureOfControl: z.array(z.string()).min(1, "Select at least one nature of control"),
 });
 export type BeneficialOwnerInput = z.infer<typeof beneficialOwnerSchema>;

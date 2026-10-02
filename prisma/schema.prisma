@@ -436,3 +436,47 @@ model ComplianceEvent {
 
   @@index([companyId, dueDate])
 }
+
+// ─── Operations (assisted filings) ──────────────────────────────────────────
+
+enum OpsTaskKind {
+  LODGEMENT         // Company registration lodged by staff (ASIC, Secretaries of State)
+  TAX_REGISTRATION  // EIN / ABN / HMRC registration handled by staff
+}
+
+enum OpsTaskStatus {
+  OPEN         // Waiting for staff
+  IN_PROGRESS  // Picked up by a staff member
+  SUBMITTED    // Lodged with the authority, awaiting its decision
+  COMPLETED    // Authority approved; outcome recorded
+  ACTION_REQUIRED // Authority (or staff) needs more information from the customer
+  REJECTED
+}
+
+// Work queue for filings a government body doesn't accept by API.
+// Registry adapters read these tasks the same way they'd poll a registry.
+model OpsTask {
+  id                String        @id @default(cuid())
+  reference         String        @unique // e.g. OPS-AU-7K2M9Q — the "registry reference" the adapter returns
+  kind              OpsTaskKind
+  status            OpsTaskStatus @default(OPEN)
+  jurisdiction      Jurisdiction
+  authority         String        // ASIC, DE-DOC, WY-SOS, IRS, ABR, HMRC…
+  companyId         String
+  filingId          String?
+  payload           Json          // Everything staff need to lodge (FormationPayload, tax application data)
+  assigneeId        String?
+  externalReference String?       // Reference the authority gave staff when lodging
+  resultNumber      String?       // ACN / file number / EIN / ABN / UTR
+  resultDate        DateTime?     // Incorporation / issue date
+  message           String?       // Latest note shown to the customer (requisition, rejection reason)
+  documents         Json?         // [{ type, title, fileName, storageKey }] uploaded by staff
+  notes             String?       // Internal notes, never shown to customers
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  submittedAt       DateTime?
+  completedAt       DateTime?
+
+  @@index([kind, status, createdAt])
+  @@index([companyId])
+}

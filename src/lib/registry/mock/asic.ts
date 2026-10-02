@@ -64,13 +64,6 @@ export class MockAsicAdapter extends MockRegistryAdapter {
     { name: "Koala Software Pty Ltd", number: "600 000 053" },
   ];
 
-  protected readonly restrictedWords = [
-    { word: "bank", reason: "requires APRA approval under the Banking Act 1959." },
-    { word: "university", reason: "requires approval from the relevant education minister." },
-    { word: "anzac", reason: "requires approval from the Minister for Veterans' Affairs." },
-    { word: "royal", reason: "suggests a royal connection and requires consent." },
-    { word: "chartered", reason: "suggests a professional charter and requires consent." },
-  ];
 
   protected validateLodgement(payload: FormationPayload): RegistryIssue[] {
     const issues: RegistryIssue[] = [];

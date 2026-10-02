@@ -1,7 +1,9 @@
 import { failFiling, fulfilApprovedFiling, lodgeFiling, syncFilingStatus } from "../formations/lodgement";
 import { filingQueued, inngest } from "./client";
 
-const MAX_POLLS = 120;
+/** Registries can take days (assisted lodgement), so poll for up to a week; staff actions also sync immediately. */
+const POLL_BUDGET_MS = 7 * 24 * 60 * 60 * 1000;
+const MAX_POLLS = 400;
 
 /**
  * Durable lodgement workflow:
@@ -24,8 +26,9 @@ export const lodgeFormation = inngest.createFunction(
 
     let state = await step.run("submit-to-registry", () => lodgeFiling(filingId));
 
-    for (let attempt = 0; !state.settled && attempt < MAX_POLLS; attempt++) {
-      await step.sleep(`wait-${attempt}`, Math.min(Math.max(state.nextPollInMs ?? 5_000, 1_000), 60_000));
+    const startedAt = await step.run("started-at", () => Date.now());
+    for (let attempt = 0; !state.settled && attempt < MAX_POLLS && Date.now() - startedAt < POLL_BUDGET_MS; attempt++) {
+      await step.sleep(`wait-${attempt}`, Math.min(Math.max(state.nextPollInMs ?? 5_000, 1_000), 60 * 60_000));
       state = await step.run(`poll-status-${attempt}`, () => syncFilingStatus(filingId));
     }
 

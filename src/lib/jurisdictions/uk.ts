@@ -113,6 +113,10 @@ export const unitedKingdom: JurisdictionProfile = {
       title: "What is a PSC?",
       body: "A Person with Significant Control is anyone who owns more than 25% of shares or voting rights, can appoint the board, or otherwise controls the company. Companies House publishes the PSC register.",
     },
+    personalCode: {
+      title: "Companies House personal code",
+      body: "Directors and PSCs must verify their identity with Companies House (via GOV.UK One Login or an authorised agent) and give the 11-character personal code. Add it now if you have it — otherwise we'll help you verify before we lodge.",
+    },
     sic: {
       title: "What is a SIC code?",
       body: "Standard Industrial Classification codes describe what your company does. Choose 1–4 codes; you can change them later with your confirmation statement.",

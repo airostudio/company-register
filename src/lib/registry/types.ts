@@ -28,6 +28,7 @@ export interface FormationPayload {
     nationality?: string;
     residentialAddress: Address;
     directorId?: string;
+    identityVerificationCode?: string;
   }[];
   shareCapital: { totalUnits: number; kind: "shares" | "membership" };
   shareholders: {
@@ -46,6 +47,7 @@ export interface FormationPayload {
     residentialAddress: Address;
     ownershipPercent: number;
     natureOfControl: string[];
+    identityVerificationCode?: string;
   }[];
   noBeneficialOwnersStatement: boolean;
   expedited: boolean;
@@ -58,7 +60,9 @@ export type NameIssueCode =
   | "RESTRICTED_WORD"
   | "INVALID_CHARACTERS"
   | "MISSING_LEGAL_ENDING"
-  | "TOO_SHORT";
+  | "TOO_SHORT"
+  /** The live register couldn't be searched; staff confirm availability before lodging. */
+  | "UNVERIFIED";
 
 export interface NameIssue {
   code: NameIssueCode;
@@ -154,6 +158,9 @@ export interface IGovernmentRegistryAdapter {
 
   /** Registry-issued documents (certificate, stamped filing). Only after approval. */
   downloadOfficialDocuments(filingId: string): Promise<OfficialDocument[]>;
+
+  /** Whether a reference returned by submitFiling belongs to this adapter (references are self-describing). */
+  ownsReference(reference: string): boolean;
 }
 
 export type RegistryErrorCode =

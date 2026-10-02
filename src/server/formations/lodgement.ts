@@ -11,7 +11,10 @@ import {
 } from "@/lib/registry";
 import { db, toJson } from "../db";
 import { documentContextFromCompany } from "../documents";
+import { sendEmail } from "../email";
+import { layout } from "../email/templates";
 import { documentKey, storage } from "../storage";
+import { appUrl } from "../urls";
 
 /**
  * Lodgement service: moves an incorporation Filing through the registry.
@@ -84,6 +87,7 @@ export async function lodgeFiling(filingId: string): Promise<SyncResult> {
         errorField: primary?.field ?? null,
         responsePayload: toJson(error.toJSON()),
       }, { issues: error.issues });
+      await notifyCustomer(filing.id, "REQUIRES_ACTION", error.message);
       return { status: "REQUIRES_ACTION", settled: true };
     }
     throw error;
@@ -97,11 +101,15 @@ export async function failFiling(filingId: string, reason: string): Promise<void
   await transition(filing, filing.status, "FAILED", `Lodgement failed: ${reason}`, { errorCode: "LODGEMENT_FAILED", errorMessage: reason });
 }
 
-/** Poll the registry once and record any status change. */
-export async function syncFilingStatus(filingId: string): Promise<SyncResult> {
+/**
+ * Poll the registry once and record any status change.
+ * `resume` also re-polls a REQUIRES_ACTION filing (e.g. after staff resolved a requisition).
+ */
+export async function syncFilingStatus(filingId: string, opts: { resume?: boolean } = {}): Promise<SyncResult> {
   const prisma = db();
   const filing = await prisma.filing.findUniqueOrThrow({ where: { id: filingId } });
-  if (!filing.registryReference || isSettled(filing.status)) {
+  const skip = isTerminalFilingStatus(filing.status) || (filing.status === "REQUIRES_ACTION" && !opts.resume);
+  if (!filing.registryReference || skip) {
     return { status: filing.status, settled: isSettled(filing.status) };
   }
 
@@ -123,6 +131,7 @@ export async function syncFilingStatus(filingId: string): Promise<SyncResult> {
         errorField: issue?.field ?? null,
         responsePayload: toJson(result),
       }, result.issues ? { issues: result.issues } : undefined);
+      if (result.status === "REQUIRES_ACTION" || result.status === "REJECTED") await notifyCustomer(filing.id, result.status, result.message);
     }
   }
   return { status: result.status, settled: isSettled(result.status), nextPollInMs: result.nextPollInMs };
@@ -240,5 +249,26 @@ export async function fulfilApprovedFiling(filingId: string): Promise<{ document
     complianceEvents = count;
   }
 
+  if (documents > 0) await notifyCustomer(filingId, "APPROVED", `${company.legalName ?? company.proposedName} is registered and your documents are ready.`);
   return { documents, complianceEvents };
+}
+
+/** Email the company owner about a milestone. Failures are logged, never thrown. */
+async function notifyCustomer(filingId: string, status: "APPROVED" | "REQUIRES_ACTION" | "REJECTED", detail: string) {
+  try {
+    const filing = await db().filing.findUniqueOrThrow({ where: { id: filingId }, include: { company: { include: { owner: true } } } });
+    const name = filing.company.legalName ?? filing.company.proposedName;
+    const content = {
+      APPROVED: { subject: `${name} is registered 🎉`, heading: "Your company is registered", paragraphs: [detail, "Your certificate, governing documents and registers are in your document vault."] },
+      REQUIRES_ACTION: { subject: `Action needed: ${name}`, heading: "We need a little more information", paragraphs: [detail, "Our team will contact you, or you can reply to this email."] },
+      REJECTED: { subject: `Update on ${name}`, heading: "The registry didn't accept the application", paragraphs: [detail, "We'll be in touch about next steps, including a refund of unused government fees."] },
+    }[status];
+    await sendEmail({
+      to: filing.company.owner.email,
+      category: "receipt",
+      ...layout({ ...content, action: { label: "Open dashboard", url: `${appUrl()}/dashboard` } }),
+    });
+  } catch (error) {
+    console.error(`[lodgement] couldn't notify customer about ${filingId}`, error);
+  }
 }

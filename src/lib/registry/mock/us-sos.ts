@@ -53,13 +53,6 @@ export class MockUsSecretaryOfStateAdapter extends MockRegistryAdapter {
     { name: "Northwind Traders Inc.", number: "7000005" },
   ];
 
-  protected readonly restrictedWords = [
-    { word: "bank", reason: "requires approval from the State Bank Commissioner." },
-    { word: "insurance", reason: "requires approval from the Department of Insurance." },
-    { word: "trust", reason: "may imply a trust company and require banking approval." },
-    { word: "university", reason: "requires Department of Education approval." },
-    { word: "cooperative", reason: "is reserved for cooperative associations." },
-  ];
 
   protected validateLodgement(payload: FormationPayload): RegistryIssue[] {
     const issues: RegistryIssue[] = [];
