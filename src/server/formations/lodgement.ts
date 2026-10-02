@@ -38,7 +38,7 @@ export interface SyncResult {
  * `from`, so two concurrent pollers can't both record the same transition.
  */
 export async function transition(
-  filing: Pick<Filing, "id" | "companyId">,
+  filing: Pick<Filing, "id" | "companyId" | "type">,
   from: FilingStatus,
   to: FilingStatus,
   message: string,
@@ -52,7 +52,10 @@ export async function transition(
     await tx.filingEvent.create({
       data: { filingId: filing.id, status: to, message, metadata: metadata === undefined ? undefined : toJson(metadata) },
     });
-    await tx.company.update({ where: { id: filing.companyId }, data: { status: filingStatusToCompanyStatus(to) } });
+    // Only the incorporation filing drives the company's lifecycle status.
+    if (filing.type === "INCORPORATION") {
+      await tx.company.update({ where: { id: filing.companyId }, data: { status: filingStatusToCompanyStatus(to) } });
+    }
     return true;
   });
 }
@@ -252,6 +255,14 @@ export async function fulfilApprovedFiling(filingId: string): Promise<{ document
   }
 
   if (documents > 0) await notifyCustomer(filingId, "APPROVED", `${company.legalName ?? company.proposedName} is registered and your documents are ready.`);
+
+  // Tax ID add-on: start the EIN / ABN / UTR registration now that we have a registry number.
+  const { startTaxRegistration } = await import("../tax/service");
+  const taxFilingId = await startTaxRegistration(company.id);
+  if (taxFilingId) {
+    const { dispatchTaxRegistration } = await import("../jobs/dispatch");
+    await dispatchTaxRegistration(taxFilingId);
+  }
   return { documents, complianceEvents };
 }
 

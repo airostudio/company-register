@@ -70,3 +70,4 @@ export async function generateDocumentPack(ctx: DocumentContext, opts: { exclude
 }
 export { renderLodgementPack } from "./templates/lodgement-pack";
 export { renderConsentsToAct, consentStatements, type ConsentSignature } from "./templates/registers";
+export { renderTaxConfirmation, renderTaxWorksheet } from "./templates/tax";

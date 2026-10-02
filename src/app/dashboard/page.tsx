@@ -5,7 +5,9 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { CompanyPanel } from "@/components/dashboard/company-panel";
+import { jobRunner } from "@/server/jobs/client";
 import { getDashboard, getFilingView } from "@/server/queries";
+import { advanceTaxFilingsInline } from "@/server/tax/service";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/server/session";
 
@@ -19,6 +21,7 @@ export default async function DashboardPage() {
 
   let companies: Awaited<ReturnType<typeof getDashboard>>;
   try {
+    if (jobRunner() === "inline") await advanceTaxFilingsInline(userId);
     companies = await getDashboard(userId);
   } catch (error) {
     console.error(error);
@@ -33,7 +36,10 @@ export default async function DashboardPage() {
   const unverified = !user.emailVerifiedAt;
 
   const filingViews = await Promise.all(
-    companies.map((c) => (c.filings[0] ? getFilingView(c.filings[0].id, userId) : Promise.resolve(null))),
+    companies.map((c) => {
+      const incorporation = c.filings.find((f) => f.type === "INCORPORATION");
+      return incorporation ? getFilingView(incorporation.id, userId) : Promise.resolve(null);
+    }),
   );
 
   return (

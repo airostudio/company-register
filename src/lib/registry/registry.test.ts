@@ -186,3 +186,12 @@ describe("helpers", () => {
     expect(getRegistryAdapterForReference("US-SOS-US_DE-abc-as-1").registryCode).toBe("US-SOS");
   });
 });
+
+describe("jurisdiction scoping", () => {
+  it("treats Delaware and Wyoming as separate registers", async () => {
+    const us = new MockUsSecretaryOfStateAdapter({ speed: 0 });
+    await us.submitFiling(buildFormationPayload(buildApplication("US_DE", "US_LLC", "Twin Peaks"), "de-1"));
+    expect((await us.checkNameAvailability("Twin Peaks LLC", "US_DE")).available).toBe(false);
+    expect((await us.checkNameAvailability("Twin Peaks LLC", "US_WY")).available).toBe(true);
+  });
+});

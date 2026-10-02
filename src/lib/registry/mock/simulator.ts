@@ -119,17 +119,17 @@ export abstract class MockRegistryAdapter implements IGovernmentRegistryAdapter 
       query: name,
       jurisdiction,
       registryCode: this.registryCode,
-      register: this.register(),
+      register: this.register(jurisdiction),
       restrictedWords: RESTRICTED_WORDS[jurisdiction],
       suggest: options.suggest !== false,
       now: new Date(this.now()),
     });
   }
 
-  /** Static register plus everything lodged with this simulator in the current process. */
-  private register(): RegisterEntry[] {
+  /** Static register plus everything lodged in this jurisdiction (Delaware and Wyoming are separate registers). */
+  private register(jurisdiction: Jurisdiction): RegisterEntry[] {
     const lodged = [...store().entries()]
-      .filter(([, f]) => this.jurisdictions.includes(f.payload.jurisdiction))
+      .filter(([, f]) => f.payload.jurisdiction === jurisdiction)
       .map(([id, f]) => ({ name: f.payload.companyName, number: `pending ${id}` }));
     return [...this.takenNames, ...lodged];
   }

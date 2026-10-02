@@ -104,7 +104,26 @@ export default async function OpsTaskPage({ params, searchParams }: { params: Pr
                 </dl>
               </>
             ) : (
-              <pre className="overflow-x-auto rounded-md bg-muted p-3 text-xs">{JSON.stringify(task.payload, null, 2)}</pre>
+              <>
+                <Button asChild variant="outline" size="sm">
+                  <a href={`/api/admin/tasks/${task.id}/pack`} target="_blank" rel="noreferrer">
+                    <FileText /> Open prefilled application (PDF)
+                  </a>
+                </Button>
+                {(task.payload as { sections?: { title: string; fields: [string, string][] }[] }).sections?.map((section) => (
+                  <div key={section.title} className="space-y-1">
+                    <h3 className="font-medium">{section.title}</h3>
+                    <dl className="grid grid-cols-[12rem_1fr] gap-x-4 gap-y-1">
+                      {section.fields.map(([k, v]) => (
+                        <div key={k} className="contents">
+                          <dt className="text-muted-foreground">{k}</dt>
+                          <dd>{v}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  </div>
+                ))}
+              </>
             )}
             {task.externalReference && <p>Authority reference: <strong>{task.externalReference}</strong></p>}
             {task.resultNumber && (

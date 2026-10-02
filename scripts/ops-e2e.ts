@@ -78,6 +78,22 @@ async function act(cookie: string, taskId: string, fields: Record<string, string
   view = await filing(customer, created.filingId);
   check("customer filing approved", view.status === "APPROVED" && view.company.registryNumber === "650 000 017");
   check("uploaded certificate in the vault", view.documents.some((d: any) => d.source === "REGISTRY" && d.type === "CERTIFICATE_OF_INCORPORATION"), view.documents.map((d: any) => d.title).join("; "));
+  // Tax ID add-on → a TAX_REGISTRATION task for the ABR.
+  let taxTaskId: string | undefined;
+  for (let i = 0; i < 20 && !taxTaskId; i++) {
+    await fetch(`${BASE}/dashboard`, { headers: { cookie: customer } }); // inline runner advances on view
+    const list = await (await fetch(`${BASE}/admin?view=open&kind=TAX_REGISTRATION`, { headers: { cookie: ops } })).text();
+    taxTaskId = list.includes(name) ? list.match(new RegExp(`/admin/tasks/([a-z0-9]+)"(?:(?!</a>).)*${name}`, "s"))?.[1] : undefined;
+    if (!taxTaskId) await sleep(1000);
+  }
+  check("tax registration task created", !!taxTaskId);
+  const worksheet = await fetch(`${BASE}/api/admin/tasks/${taxTaskId}/pack`, { headers: { cookie: ops } });
+  check("prefilled tax worksheet PDF", worksheet.status === 200 && Buffer.from(await worksheet.arrayBuffer()).subarray(0, 5).toString() === "%PDF-");
+  check("tax: lodged", (await act(ops, taxTaskId!, { action: "lodged", externalReference: "ABR-REF-1" })).location.includes("ok=1"));
+  check("tax: issued", (await act(ops, taxTaskId!, { action: "approve", resultNumber: "51 824 753 556", resultDate: "2026-10-03" })).location.includes("ok=1"));
+  const dash = await (await fetch(`${BASE}/dashboard`, { headers: { cookie: customer } })).text();
+  check("customer sees ABN", dash.includes("51 824 753 556") && dash.includes("ABN confirmation"));
+
   const mails = (await (await fetch(`${BASE}/api/dev/mailbox?to=${encodeURIComponent(app.review.contactEmail)}`)).json()).messages.map((m: any) => m.subject);
   check("customer emailed about requisition and approval", mails.some((s: string) => s.startsWith("Action needed")) && mails.some((s: string) => s.includes("is registered")), mails.join(" | "));
 })();

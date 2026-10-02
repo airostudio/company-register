@@ -21,7 +21,7 @@ const TARGETS: Record<string, [Jurisdiction, EntityType]> = {
 
 async function run(key: string) {
   const [jurisdiction, entityType] = TARGETS[key]!;
-  const app = buildApplication(jurisdiction, entityType, `Smoke Test ${Date.now().toString(36)}`);
+  const app = buildApplication(jurisdiction, entityType, `Smoke ${key.replace("_", " ")} ${Date.now().toString(36)}`);
   app.review.contactEmail = `smoke+${key.toLowerCase()}-${Date.now()}@example.com`;
   uniqueOfficerEmails(app, key.toLowerCase());
 
@@ -72,6 +72,19 @@ async function run(key: string) {
     if (!d.ok || !isPdf) throw new Error(`${key}: document ${doc.title} failed (${d.status})`);
   }
   console.log(`${key}: ${view.documents.length} documents OK (${view.documents.map((d) => d.title).join("; ")})`);
+
+  // The Tax ID add-on starts a tax registration after incorporation (advanced inline by dashboard views).
+  const label = { AU: "ABN", US_DE: "EIN", US_WY: "EIN", UK: "UTR" }[key]!;
+  for (let i = 0; ; i++) {
+    const html = await (await fetch(`${BASE_URL}/dashboard`, { headers: { cookie } })).text();
+    const issued = html.match(new RegExp(`${label} confirmation`));
+    if (issued) {
+      console.log(`${key}: ${label} issued`);
+      break;
+    }
+    if (i > 40) throw new Error(`${key}: ${label} was never issued`);
+    await new Promise((r) => setTimeout(r, 1000));
+  }
 }
 
 /** Magic-link round trip via the dev mailbox (needs DEV_MAILBOX=1 on the server). */

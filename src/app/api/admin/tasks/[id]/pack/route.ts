@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { renderLodgementPack } from "@/lib/documents";
+import { renderLodgementPack, renderTaxWorksheet } from "@/lib/documents";
+import type { TaxApplication } from "@/lib/tax/application";
 import type { FormationPayload } from "@/lib/registry/types";
 import { db } from "@/server/db";
 import { requireAdmin } from "@/server/session";
@@ -9,8 +10,11 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
   const { id } = await params;
   if (!(await requireAdmin())) return NextResponse.json({ error: { code: "FORBIDDEN", message: "Ops access required" } }, { status: 403 });
   const task = await db().opsTask.findUnique({ where: { id } });
-  if (!task || task.kind !== "LODGEMENT") return NextResponse.json({ error: { code: "NOT_FOUND", message: "Task not found" } }, { status: 404 });
-  const pdf = await renderLodgementPack(task.payload as unknown as FormationPayload, task.reference);
+  if (!task) return NextResponse.json({ error: { code: "NOT_FOUND", message: "Task not found" } }, { status: 404 });
+  const pdf =
+    task.kind === "LODGEMENT"
+      ? await renderLodgementPack(task.payload as unknown as FormationPayload, task.reference)
+      : await renderTaxWorksheet(task.payload as unknown as TaxApplication, task.reference);
   return new NextResponse(Buffer.from(pdf), {
     headers: {
       "Content-Type": "application/pdf",

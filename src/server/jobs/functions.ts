@@ -1,5 +1,6 @@
 import { failFiling, fulfilApprovedFiling, lodgeFiling, syncFilingStatus } from "../formations/lodgement";
-import { filingQueued, inngest } from "./client";
+import { syncTaxRegistration } from "../tax/service";
+import { filingQueued, inngest, taxRequested } from "./client";
 
 /** Registries can take days (assisted lodgement), so poll for up to a week; staff actions also sync immediately. */
 const POLL_BUDGET_MS = 7 * 24 * 60 * 60 * 1000;
@@ -40,4 +41,18 @@ export const lodgeFormation = inngest.createFunction(
   },
 );
 
-export const functions = [lodgeFormation];
+/** Poll a tax registration until the number is issued (staff actions also sync immediately). */
+export const registerTaxId = inngest.createFunction(
+  { id: "register-tax-id", name: "Follow up tax ID registration", triggers: [taxRequested], retries: 5, concurrency: { key: "event.data.filingId", limit: 1 } },
+  async ({ event, step }) => {
+    const { filingId } = event.data;
+    let state = await step.run("poll-0", () => syncTaxRegistration(filingId));
+    for (let attempt = 1; !state.settled && attempt < MAX_POLLS; attempt++) {
+      await step.sleep(`wait-${attempt}`, Math.min(Math.max(state.nextPollInMs ?? 60_000, 1_000), 60 * 60_000));
+      state = await step.run(`poll-${attempt}`, () => syncTaxRegistration(filingId));
+    }
+    return state;
+  },
+);
+
+export const functions = [lodgeFormation, registerTaxId];

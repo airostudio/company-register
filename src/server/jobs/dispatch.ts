@@ -1,6 +1,6 @@
 import { after } from "next/server";
 import { lodgeFiling } from "../formations/lodgement";
-import { filingQueued, inngest, jobRunner } from "./client";
+import { filingQueued, inngest, jobRunner, taxRequested } from "./client";
 
 /**
  * Kick off lodgement for a newly queued filing.
@@ -21,4 +21,9 @@ export async function dispatchFilingLodgement(filingId: string): Promise<void> {
       console.error(`[jobs] inline lodgement failed for ${filingId}`, error);
     }
   });
+}
+
+/** Follow up a lodged tax registration. Inline mode advances it when the owner views the dashboard. */
+export async function dispatchTaxRegistration(filingId: string): Promise<void> {
+  if (jobRunner() === "inngest") await inngest.send(taxRequested.create({ filingId }));
 }

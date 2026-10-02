@@ -4,6 +4,7 @@ import { db, toJson } from "../db";
 import { AppError } from "../errors";
 import { fulfilApprovedFiling, syncFilingStatus } from "../formations/lodgement";
 import { documentKey, storage } from "../storage";
+import { syncTaxRegistration } from "../tax/service";
 import type { OpsTaskDocument } from "./tasks";
 
 export const OPS_ACTIONS = ["claim", "lodged", "approve", "action_required", "resume", "reject", "note"] as const;
@@ -119,7 +120,10 @@ export async function applyOpsAction(taskId: string, actorId: string, form: Form
   const { count } = await prisma.opsTask.updateMany({ where: { id: task.id, status: task.status }, data });
   if (count === 0) throw new AppError(409, "STALE", "This task changed while you were working on it — reload and try again");
 
-  if (task.filingId && input.action !== "note") await advanceFiling(task.filingId, input.action === "resume");
+  if (task.filingId && input.action !== "note") {
+    if (task.kind === "TAX_REGISTRATION") await syncTaxRegistration(task.filingId);
+    else await advanceFiling(task.filingId, input.action === "resume");
+  }
   return prisma.opsTask.findUniqueOrThrow({ where: { id: task.id } });
 }
 

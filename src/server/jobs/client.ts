@@ -7,6 +7,11 @@ export const filingQueued = eventType("formation/filing.queued", {
   schema: staticSchema<{ filingId: string }>(),
 });
 
+/** Emitted when a tax ID registration has been lodged and needs following up. */
+export const taxRequested = eventType("formation/tax.requested", {
+  schema: staticSchema<{ filingId: string }>(),
+});
+
 /** Background jobs run through Inngest when configured, otherwise inline (local dev without Inngest). */
 export function jobRunner(): "inngest" | "inline" {
   if (process.env.JOB_RUNNER === "inline") return "inline";

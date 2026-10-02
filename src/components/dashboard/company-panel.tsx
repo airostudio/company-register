@@ -48,6 +48,7 @@ export function CompanyPanel({ company, filing }: { company: DashboardCompany; f
   const generatedDocs = company.documents.filter((d) => d.source !== "REGISTRY");
   const plan = company.subscription ? PLANS[company.subscription.plan] : undefined;
   const nextDue = company.complianceEvents.find((e) => e.status !== "COMPLETED");
+  const taxFiling = company.filings.find((f) => f.type === "TAX_ID_APPLICATION");
 
   return (
     <Card>
@@ -217,7 +218,12 @@ export function CompanyPanel({ company, filing }: { company: DashboardCompany; f
             </div>
             <div className="space-y-1">
               <h4 className="font-semibold">{profile.identifiers.taxId}</h4>
-              <p className="text-muted-foreground">{company.taxId ?? "Not yet issued"}</p>
+              <p className="text-muted-foreground">
+                {company.taxId ??
+                  (taxFiling
+                    ? `Registration ${FILING_STATUS_LABELS[taxFiling.status].toLowerCase()}${taxFiling.status === "REQUIRES_ACTION" && taxFiling.errorMessage ? ` — ${taxFiling.errorMessage}` : ""}`
+                    : "Not yet issued")}
+              </p>
             </div>
             <div className="space-y-1">
               <h4 className="font-semibold">Business activity</h4>
