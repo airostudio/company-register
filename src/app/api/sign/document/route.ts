@@ -2,9 +2,12 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getCurrentUser } from "@/server/session";
 import { findRequestByToken, findRequestForUser } from "@/server/signatures/service";
 import { storage } from "@/server/storage";
+import { clientIp, enforceRateLimits, RATE_LIMITS } from "@/server/rate-limit";
 
 /** GET /api/sign/document?token=… | ?id=… — the exact consent PDF the signer is asked to sign. */
 export async function GET(request: NextRequest) {
+  const limited = await enforceRateLimits([[RATE_LIMITS.signIp, clientIp(request)]]);
+  if (limited) return limited;
   const token = request.nextUrl.searchParams.get("token");
   const id = request.nextUrl.searchParams.get("id");
   const user = id ? await getCurrentUser() : null;

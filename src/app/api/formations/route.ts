@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import type { CreateFormationResponse } from "@/lib/api-types";
 import { parseFormationApplication } from "@/lib/validation/formation";
 import { errorResponse } from "@/server/errors";
+import { clientIp, enforceRateLimits, RATE_LIMITS } from "@/server/rate-limit";
 import { createFormation } from "@/server/formations/create";
 import { assertMockPaymentsAllowed, paymentsMode, settleWithMockProvider, startCheckout } from "@/server/payments";
 import { sendLoginLink } from "@/server/auth";
@@ -10,6 +11,8 @@ import { appUrl } from "@/server/urls";
 
 /** POST /api/formations — validate, price, persist and queue a formation for lodgement. */
 export async function POST(request: NextRequest) {
+  const limited = await enforceRateLimits([[RATE_LIMITS.formationIp, clientIp(request)]]);
+  if (limited) return limited;
   const body = await request.json().catch(() => null);
   const parsed = parseFormationApplication(body);
   if (!parsed.success) {

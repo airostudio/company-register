@@ -520,3 +520,16 @@ model OpsTask {
   @@index([kind, status, createdAt])
   @@index([companyId])
 }
+
+// ─── Rate limiting ──────────────────────────────────────────────────────────
+
+// Fixed-window counters combined into a sliding window (see src/server/rate-limit.ts).
+model RateLimitBucket {
+  key         String
+  windowStart DateTime
+  count       Int
+  expiresAt   DateTime
+
+  @@id([key, windowStart])
+  @@index([expiresAt])
+}

@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { sendLoginLink } from "@/server/auth";
 import { errorResponse } from "@/server/errors";
+import { clientIp, enforceRateLimits, RATE_LIMITS } from "@/server/rate-limit";
 import { appUrl, safeRedirect } from "@/server/urls";
 
 const bodySchema = z.object({
@@ -15,6 +16,11 @@ export async function POST(request: NextRequest) {
   if (!parsed.success) {
     return NextResponse.json({ error: { code: "BAD_REQUEST", message: parsed.error.issues[0]?.message ?? "Invalid request" } }, { status: 400 });
   }
+  const limited = await enforceRateLimits([
+    [RATE_LIMITS.loginIp, clientIp(request)],
+    [RATE_LIMITS.loginEmail, parsed.data.email.trim().toLowerCase()],
+  ]);
+  if (limited) return limited;
   try {
     await sendLoginLink({ email: parsed.data.email, redirectTo: safeRedirect(parsed.data.redirectTo), baseUrl: appUrl(request) });
     return NextResponse.json({ ok: true });

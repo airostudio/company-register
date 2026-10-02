@@ -48,6 +48,7 @@ export function NameStep() {
   const suffix = useWatch({ control: form.control, name: "suffix" });
   const fullName = composeCompanyName(baseName, suffix ?? "");
   const [check, setCheck] = useState<CheckState>({ kind: "idle" });
+  const [retryNonce, setRetryNonce] = useState(0);
   const latest = useRef(0);
 
   // Debounced live availability search against the registry.
@@ -59,6 +60,7 @@ export function NameStep() {
     }
     const requestId = ++latest.current;
     const controller = new AbortController();
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
     const timer = setTimeout(async () => {
       setCheck({ kind: "checking", name: fullName });
       const params = new URLSearchParams({
@@ -71,6 +73,13 @@ export function NameStep() {
         const res = await fetch(`/api/names/check?${params}`, { signal: controller.signal });
         const body = await res.json();
         if (requestId !== latest.current) return;
+        if (res.status === 429) {
+          // Rate limited: tell the user and retry automatically once the window allows it.
+          const wait = Number(res.headers.get("Retry-After") ?? 5);
+          setCheck({ kind: "error", name: fullName, message: `You're searching quickly — we'll check again in ${wait} seconds.` });
+          retryTimer = setTimeout(() => setRetryNonce((n) => n + 1), wait * 1000);
+          return;
+        }
         if (!res.ok) throw new Error(body?.error?.message ?? "Name search failed");
         const data = body as NameCheckResponse;
         setCheck({ kind: "done", name: fullName, data });
@@ -81,14 +90,15 @@ export function NameStep() {
         );
       } catch (error) {
         if (controller.signal.aborted || requestId !== latest.current) return;
-        setCheck({ kind: "error", name: fullName, message: error instanceof Error ? error.message : "Name search failed" });
+        setCheck({ kind: "error", name: fullName, message: `${error instanceof Error ? error.message : "Name search failed"}. Keep typing to retry.` });
       }
     }, DEBOUNCE_MS);
     return () => {
       clearTimeout(timer);
+      clearTimeout(retryTimer);
       controller.abort();
     };
-  }, [baseName, fullName, entity.jurisdiction, entity.entityType, form]);
+  }, [baseName, fullName, entity.jurisdiction, entity.entityType, form, retryNonce]);
 
   const applySuggestion = (name: string) => {
     form.setValue("baseName", stripLegalEnding(name), { shouldDirty: true });
@@ -165,7 +175,7 @@ export function NameStep() {
               <Alert variant="destructive">
                 <XCircle />
                 <AlertTitle>Couldn&apos;t check the name</AlertTitle>
-                <AlertDescription>{check.message}. Keep typing to retry.</AlertDescription>
+                <AlertDescription>{check.message}</AlertDescription>
               </Alert>
             )}
             {result && result.status === "AVAILABLE" && (

@@ -11,6 +11,7 @@ const ERRORS: Record<string, string> = {
   expired: "That sign-in link has expired. Request a new one below.",
   used: "That sign-in link has already been used. Request a new one below.",
   invalid: "That sign-in link isn't valid. Request a new one below.",
+  rate_limited: "Too many sign-in attempts from your network. Wait a few minutes and try again.",
 };
 
 export default async function LoginPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {

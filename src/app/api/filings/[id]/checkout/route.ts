@@ -4,10 +4,13 @@ import { errorResponse } from "@/server/errors";
 import { paymentsMode, settleWithMockProvider, startCheckout } from "@/server/payments";
 import { getSessionUserId } from "@/server/session";
 import { appUrl } from "@/server/urls";
+import { clientIp, enforceRateLimits, RATE_LIMITS } from "@/server/rate-limit";
 
 /** POST /api/filings/:id/checkout — (re)start payment for an unpaid formation. */
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const limited = await enforceRateLimits([[RATE_LIMITS.formationIp, clientIp(request)]]);
+  if (limited) return limited;
   const userId = await getSessionUserId();
   if (!userId) return NextResponse.json({ error: { code: "UNAUTHENTICATED", message: "Sign in to continue" } }, { status: 401 });
   try {

@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { errorResponse } from "@/server/errors";
+import { clientIp, enforceRateLimits, RATE_LIMITS } from "@/server/rate-limit";
 import { getCurrentUser } from "@/server/session";
 import { declineConsent, findRequestByToken, findRequestForUser, signConsent } from "@/server/signatures/service";
 
@@ -15,6 +16,8 @@ const bodySchema = z.object({
 
 /** POST /api/sign — sign or decline a consent, authorised by the emailed token or the signer's own session. */
 export async function POST(request: NextRequest) {
+  const limited = await enforceRateLimits([[RATE_LIMITS.signIp, clientIp(request)]]);
+  if (limited) return limited;
   const parsed = bodySchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: { code: "BAD_REQUEST", message: "Invalid request" } }, { status: 400 });
   const { token, requestId, action } = parsed.data;
