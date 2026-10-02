@@ -126,15 +126,68 @@ enum ComplianceEventStatus {
 
 // ─── Identity ───────────────────────────────────────────────────────────────
 
+enum UserRole {
+  CUSTOMER
+  ADMIN // Ops staff: assisted lodgements, tax registrations, template review
+}
+
 model User {
-  id            String         @id @default(cuid())
-  email         String         @unique
-  name          String?
-  countryCode   String?        // ISO-3166 alpha-2, drives non-resident founder flows
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-  companies     Company[]
-  subscriptions Subscription[]
+  id              String         @id @default(cuid())
+  email           String         @unique
+  name            String?
+  countryCode     String?        // ISO-3166 alpha-2, drives non-resident founder flows
+  role            UserRole       @default(CUSTOMER)
+  emailVerifiedAt DateTime?      // Set when the user first signs in through a magic link
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  companies       Company[]
+  subscriptions   Subscription[]
+  sessions        Session[]
+}
+
+// Opaque session tokens; only the SHA-256 hash is stored.
+model Session {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash  String   @unique
+  expiresAt  DateTime
+  lastSeenAt DateTime @default(now())
+  userAgent  String?
+  ip         String?
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+}
+
+// One-time magic-link tokens (hashed), valid for 15 minutes.
+model LoginToken {
+  id         String    @id @default(cuid())
+  email      String
+  tokenHash  String    @unique
+  redirectTo String?
+  expiresAt  DateTime
+  usedAt     DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([email, createdAt])
+}
+
+// Every transactional email we send (audit trail + dev mailbox).
+model EmailMessage {
+  id         String   @id @default(cuid())
+  to         String
+  subject    String
+  text       String
+  html       String?
+  category   String   // login | verification | signature | reminder | receipt
+  provider   String   // log | resend
+  providerId String?
+  status     String   // SENT | FAILED
+  error      String?
+  createdAt  DateTime @default(now())
+
+  @@index([to, createdAt])
 }
 
 // ─── Company aggregate ──────────────────────────────────────────────────────

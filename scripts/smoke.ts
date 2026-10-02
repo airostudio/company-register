@@ -58,8 +58,33 @@ async function run(key: string) {
   console.log(`${key}: ${view.documents.length} documents OK (${view.documents.map((d) => d.title).join("; ")})`);
 }
 
+/** Magic-link round trip via the dev mailbox (needs DEV_MAILBOX=1 on the server). */
+async function signIn() {
+  const email = `smoke-login-${Date.now()}@example.com`;
+  const res = await fetch(`${BASE_URL}/api/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, redirectTo: "/dashboard" }),
+  });
+  if (!res.ok) throw new Error(`login: ${res.status}`);
+  const mailbox = await fetch(`${BASE_URL}/api/dev/mailbox?to=${encodeURIComponent(email)}`);
+  if (mailbox.status === 404) return console.log("login: skipped (DEV_MAILBOX not enabled)");
+  const { messages } = (await mailbox.json()) as { messages: { text: string }[] };
+  const link = messages[0]?.text.match(/https?:\/\/\S+\/api\/auth\/verify\?token=\S+/)?.[0];
+  if (!link) throw new Error("login: no magic link in mailbox");
+  const path = new URL(link).pathname + new URL(link).search;
+  const verify = await fetch(`${BASE_URL}${path}`, { redirect: "manual" });
+  const cookie = verify.headers.get("set-cookie")?.split(";")[0];
+  if (verify.status !== 303 || !verify.headers.get("location")?.endsWith("/dashboard") || !cookie) throw new Error(`login: verify → ${verify.status}`);
+  const reuse = await fetch(`${BASE_URL}${path}`, { redirect: "manual" });
+  if (!reuse.headers.get("location")?.includes("error=used")) throw new Error("login: link was reusable");
+  const dashboard = await fetch(`${BASE_URL}/dashboard`, { headers: { cookie }, redirect: "manual" });
+  if (dashboard.status !== 200) throw new Error(`login: dashboard → ${dashboard.status}`);
+  console.log("login: magic link signs in, is single-use, and opens the dashboard");
+}
+
 const keys = process.argv.slice(2).length ? process.argv.slice(2) : Object.keys(TARGETS);
-Promise.all(keys.map(run)).then(
+signIn().then(() => Promise.all(keys.map(run))).then(
   () => console.log("Smoke test passed"),
   (error) => {
     console.error(error);

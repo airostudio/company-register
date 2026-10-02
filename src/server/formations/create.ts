@@ -10,6 +10,8 @@ import { AppError } from "../errors";
 
 export interface CreatedFormation {
   userId: string;
+  /** True when this checkout created the account (it still needs email verification). */
+  newUser: boolean;
   companyId: string;
   filingId: string;
   quote: Quote;
@@ -51,7 +53,7 @@ export async function createFormation(app: FormationApplication, sessionUserId?:
 
   const prisma = db();
   return prisma.$transaction(async (tx) => {
-    const user = await resolveUser(tx, email, app.review.contactName, sessionUserId);
+    const { user, created: newUser } = await resolveUser(tx, email, app.review.contactName, sessionUserId);
 
     const company = await tx.company.create({
       data: {
@@ -160,19 +162,19 @@ export async function createFormation(app: FormationApplication, sessionUserId?:
       });
     }
 
-    return { userId: user.id, companyId: company.id, filingId: filing.id, quote };
+    return { userId: user.id, newUser, companyId: company.id, filingId: filing.id, quote };
   });
 }
 
 async function resolveUser(tx: Prisma.TransactionClient, email: string, name: string, sessionUserId?: string) {
   if (sessionUserId) {
     const user = await tx.user.findUnique({ where: { id: sessionUserId } });
-    if (user) return user;
+    if (user) return { user, created: false };
   }
   const existing = await tx.user.findUnique({ where: { email } });
   if (existing) {
     // Don't let an anonymous checkout attach itself to someone else's account.
     throw new AppError(409, "ACCOUNT_EXISTS", "An account with this email already exists. Sign in to continue.");
   }
-  return tx.user.create({ data: { email, name } });
+  return { user: await tx.user.create({ data: { email, name } }), created: true };
 }

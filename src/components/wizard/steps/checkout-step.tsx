@@ -17,10 +17,15 @@ import { PriceSummary } from "../price-summary";
 
 type Issue = { path: string; message: string };
 
+function signInHref(email: string) {
+  return `/login?${new URLSearchParams({ email, redirectTo: "/register" })}`;
+}
+
 export function CheckoutStep() {
   const dispatch = useWizardDispatch();
   const { draft, phase, submission, submitError } = useWizardStore();
   const [issues, setIssues] = useState<Issue[]>([]);
+  const [errorCode, setErrorCode] = useState<string>();
 
   if (phase === "submitted" && submission) {
     return (
@@ -81,6 +86,7 @@ export function CheckoutStep() {
       if (!res.ok || "error" in body) {
         const err = (body as ApiErrorBody).error;
         setIssues((err?.issues ?? []).map((i) => ({ path: i.path ?? i.field ?? "", message: i.message })));
+        setErrorCode(err?.code);
         dispatch({ type: "SUBMIT_FAILED", error: err?.message ?? `Submission failed (${res.status})` });
         return;
       }
@@ -108,6 +114,14 @@ export function CheckoutStep() {
           <Alert variant="destructive">
             <XCircle />
             <AlertTitle>{submitError}</AlertTitle>
+            {errorCode === "ACCOUNT_EXISTS" && (
+              <AlertDescription>
+                <p>Your progress is saved — sign in and you&apos;ll come straight back here.</p>
+                <Button asChild size="sm" className="mt-2">
+                  <Link href={signInHref(app.review.contactEmail)}>Sign in to continue</Link>
+                </Button>
+              </AlertDescription>
+            )}
             {issues.length > 0 && (
               <AlertDescription>
                 <ul className="list-disc pl-4">

@@ -4,7 +4,9 @@ import { parseFormationApplication } from "@/lib/validation/formation";
 import { errorResponse } from "@/server/errors";
 import { createFormation } from "@/server/formations/create";
 import { dispatchFilingLodgement } from "@/server/jobs/dispatch";
-import { getSessionUserId, setSessionUser } from "@/server/session";
+import { sendLoginLink } from "@/server/auth";
+import { createSession, getSessionUserId } from "@/server/session";
+import { appUrl } from "@/server/urls";
 
 /** POST /api/formations — validate, price, persist and queue a formation for lodgement. */
 export async function POST(request: NextRequest) {
@@ -18,8 +20,13 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const created = await createFormation(parsed.data, await getSessionUserId());
-    await setSessionUser(created.userId);
+    const sessionUserId = await getSessionUserId();
+    const created = await createFormation(parsed.data, sessionUserId);
+    if (!sessionUserId) await createSession(created.userId);
+    if (created.newUser) {
+      // New accounts get a session straight away but must confirm the email address.
+      await sendLoginLink({ email: parsed.data.review.contactEmail, redirectTo: "/dashboard", baseUrl: appUrl(request), purpose: "verification" });
+    }
     await dispatchFilingLodgement(created.filingId);
     return NextResponse.json<CreateFormationResponse>(
       { companyId: created.companyId, filingId: created.filingId, quote: created.quote },
