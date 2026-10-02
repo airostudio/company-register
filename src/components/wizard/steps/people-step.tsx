@@ -7,7 +7,7 @@ import { CheckCircle2, Circle, Crown, ChartPie, Plus, Trash2, UserRound, Users }
 import { jurisdictionIso } from "@/lib/countries";
 import { ADDRESS_COUNTRIES } from "@/lib/countries";
 import { OFFICER_ROLE_LABELS, SHARE_CLASS_LABELS, type EntityType, type Jurisdiction } from "@/lib/domain";
-import { getEntityProfile, getJurisdiction } from "@/lib/jurisdictions";
+import { getEntityProfile, getJurisdiction, meetsOwnershipThreshold, ownershipThresholdLabel } from "@/lib/jurisdictions";
 import { cn, createId, formatPercent } from "@/lib/utils";
 import { emptyAddress } from "@/lib/validation/address";
 import {
@@ -501,7 +501,7 @@ function ShareholderCard({ index, ctx, onRemove }: { index: number; ctx: Ctx; on
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h4 className="flex items-center gap-2 font-medium">
           {holder?.fullName || `${isMembership ? "Member" : "Shareholder"} ${index + 1}`}
-          <Badge variant={percent >= profile.people.beneficialOwnership.thresholdPercent ? "default" : "secondary"}>{formatPercent(Math.round(percent * 100) / 100)}</Badge>
+          <Badge variant={meetsOwnershipThreshold(ctx.jurisdiction, percent) ? "default" : "secondary"}>{formatPercent(Math.round(percent * 100) / 100)}</Badge>
         </h4>
         <div className="flex items-center gap-2">
           {officers.some((o) => o.fullName) && (
@@ -666,7 +666,7 @@ function BeneficialOwnersTab({ ctx }: { ctx: Ctx }) {
 
   const declared = new Set(form.getValues("beneficialOwners").map((b) => b.fullName.trim().toLowerCase()));
   const candidates = summary.holders.filter(
-    (h) => h.holderType === "INDIVIDUAL" && h.percent >= bo.thresholdPercent && h.name && !declared.has(h.name.trim().toLowerCase()),
+    (h) => h.holderType === "INDIVIDUAL" && meetsOwnershipThreshold(ctx.jurisdiction, h.percent) && h.name && !declared.has(h.name.trim().toLowerCase()),
   );
 
   const importSignificant = () => {
@@ -691,7 +691,7 @@ function BeneficialOwnersTab({ ctx }: { ctx: Ctx }) {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-muted-foreground">
-          Individuals who own {bo.thresholdPercent}%+ or otherwise control the company.
+          Individuals who hold {ownershipThresholdLabel(ctx.jurisdiction)} of shares or votes, or otherwise control the company.
         </p>
         <HelpTip topic={ctx.jurisdiction === "UK" ? "psc" : "beneficialOwner"} jurisdiction={ctx.jurisdiction} />
       </div>
@@ -699,7 +699,7 @@ function BeneficialOwnersTab({ ctx }: { ctx: Ctx }) {
       {candidates.length > 0 && (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-primary/30 bg-accent/50 p-3 text-sm">
           <span>
-            {candidates.map((c) => `${c.name} (${formatPercent(c.percent)})`).join(", ")} meet{candidates.length === 1 ? "s" : ""} the {bo.thresholdPercent}% test.
+            {candidates.map((c) => `${c.name} (${formatPercent(c.percent)})`).join(", ")} hold{candidates.length === 1 ? "s" : ""} {ownershipThresholdLabel(ctx.jurisdiction)}.
           </span>
           <Button type="button" size="sm" onClick={importSignificant}>
             Add from shareholders
@@ -838,7 +838,7 @@ function BeneficialOwnersTab({ ctx }: { ctx: Ctx }) {
                 <FormControl>
                   <Checkbox checked={noneStatement} onCheckedChange={(v) => field.onChange(v === true)} />
                 </FormControl>
-                <FormLabel className="font-normal">Nobody meets the {bo.thresholdPercent}% test or otherwise controls the company</FormLabel>
+                <FormLabel className="font-normal">Nobody holds {ownershipThresholdLabel(ctx.jurisdiction)} or otherwise controls the company</FormLabel>
                 <FormMessage />
               </FormItem>
             )}

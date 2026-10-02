@@ -94,6 +94,7 @@ describe("Companies House XML Gateway", () => {
     expect(body).toContain("<TotalNumberOfIssuedShares>100</TotalNumberOfIssuedShares>");
     expect(body).toContain("<PersonalCode>ABC12345DEF</PersonalCode>");
     expect(body).toContain("<SICCode>62012</SICCode>");
+    expect(body).toContain("<RegisteredEmailAddress>company@example.com</RegisteredEmailAddress><LawfulPurposeStatement>true</LawfulPurposeStatement>");
     expect(body).not.toMatch(/<[A-Za-z]+><\/[A-Za-z]+>/); // no empty elements
   });
 
@@ -135,5 +136,7 @@ describe("Companies House XML Gateway", () => {
     const [doc] = await adapter.downloadOfficialDocuments(receipt.filingId);
     expect(Buffer.from(doc!.content).toString()).toBe("%PDF-1.4 certificate");
     expect(calls).toHaveLength(4);
+    expect(calls[0]!.body).toContain("<Articles>BESPOKE</Articles>");
+    expect(calls[0]!.body).toMatch(/<Document><Data>JVBERi0[A-Za-z0-9+/=]+<\/Data>.*<Category>MEMARTS<\/Category><\/Document>/);
   });
 });

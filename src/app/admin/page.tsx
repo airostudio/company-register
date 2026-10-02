@@ -35,6 +35,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
     { label: "Lodgements", href: "/admin?view=open&kind=LODGEMENT" },
     { label: "Tax registrations", href: "/admin?view=open&kind=TAX_REGISTRATION" },
     { label: "All", href: "/admin?view=all" },
+    { label: "Legal templates", href: "/admin/templates" },
   ];
 
   return (

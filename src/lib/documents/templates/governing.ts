@@ -5,7 +5,7 @@ import { formatDate } from "@/lib/utils";
 import { renderPdf } from "../pdf";
 import type { DocumentContext } from "../types";
 
-type GoverningType = Extract<DocumentType, "CONSTITUTION" | "BYLAWS" | "OPERATING_AGREEMENT" | "ARTICLES_OF_ASSOCIATION">;
+export type GoverningType = Extract<DocumentType, "CONSTITUTION" | "BYLAWS" | "OPERATING_AGREEMENT" | "ARTICLES_OF_ASSOCIATION">;
 
 interface Part {
   title: string;
@@ -17,7 +17,7 @@ interface Part {
  * for scaffolding — have it reviewed by a lawyer in each jurisdiction before
  * shipping to customers.
  */
-function partsFor(type: GoverningType, ctx: DocumentContext): Part[] {
+export function partsFor(type: GoverningType, ctx: DocumentContext): Part[] {
   const name = ctx.company.name;
   switch (type) {
     case "CONSTITUTION":
@@ -59,7 +59,7 @@ function partsFor(type: GoverningType, ctx: DocumentContext): Part[] {
         {
           title: "Dividends and winding up",
           clauses: [
-            "The directors may determine that a dividend is payable, provided the Company's assets exceed its liabilities immediately before the dividend is declared and the payment is fair and reasonable to shareholders as a whole.",
+            "The directors may determine that a dividend is payable, but only if (a) the Company's assets exceed its liabilities immediately before the dividend is declared and the excess is sufficient for the payment, (b) the payment is fair and reasonable to the Company's shareholders as a whole, and (c) the payment does not materially prejudice the Company's ability to pay its creditors (section 254T of the Act).",
             "On a winding up, surplus assets are distributed among shareholders in proportion to the shares held, subject to any special rights attached to a class of shares.",
           ],
         },
@@ -171,7 +171,7 @@ function partsFor(type: GoverningType, ctx: DocumentContext): Part[] {
         {
           title: "Part 3 — Shares and distributions",
           clauses: [
-            "The directors may allot shares up to any maximum authorised by ordinary resolution, subject to members' statutory pre-emption rights under section 561 of the Companies Act 2006.",
+            "While the Company has only one class of shares, the directors may allot shares of that class, or grant rights to subscribe for or convert into them, under section 550 of the Companies Act 2006. Any other allotment requires authority under section 551. Members' statutory pre-emption rights under section 561 apply unless disapplied by special resolution.",
             "Before transferring shares to a non-member, a member must first offer them to existing members pro rata at a price agreed or independently determined.",
             "The Company may by ordinary resolution declare dividends, and the directors may pay interim dividends, out of distributable profits only.",
           ],
@@ -194,13 +194,13 @@ const TITLES: Record<GoverningType, string> = {
   ARTICLES_OF_ASSOCIATION: "Articles of Association",
 };
 
-export function renderGoverningDocument(type: GoverningType, ctx: DocumentContext): Promise<Uint8Array> {
+export function renderGoverningDocument(type: GoverningType, ctx: DocumentContext, opts: { watermark?: string } = {}): Promise<Uint8Array> {
   const jurisdiction = getJurisdiction(ctx.company.jurisdiction);
   const entity = getEntityProfile(ctx.company.jurisdiction, ctx.company.entityType);
   const title = TITLES[type];
   const footer = `${ctx.company.name} — ${title}`;
 
-  return renderPdf({ title: `${ctx.company.name} — ${title}`, footer }, (w) => {
+  return renderPdf({ title: `${ctx.company.name} — ${title}`, footer, watermark: opts.watermark }, (w) => {
     w.title(title, `${ctx.company.name} · ${entity.label} · ${jurisdiction.name}`);
     if (ctx.company.registryNumber) {
       w.paragraph(`${jurisdiction.identifiers.companyNumber}: ${ctx.company.registryNumber}`, { color: "#475569" });

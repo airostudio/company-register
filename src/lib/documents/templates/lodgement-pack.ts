@@ -24,6 +24,8 @@ export function renderLodgementPack(payload: FormationPayload, reference: string
       ["Principal place of business", payload.principalPlaceOfBusiness ? formatAddress(payload.principalPlaceOfBusiness) : undefined],
       ["Business activity", payload.businessActivity],
       ["SIC codes", payload.sicCodes.join(", ") || undefined],
+      ["Registered email (UK)", payload.registeredEmail],
+      ["Lawful purpose statement", payload.lawfulPurposeStatement === undefined ? undefined : payload.lawfulPurposeStatement ? "Confirmed" : "NOT confirmed"],
       ["Lodging on behalf of", `${payload.lodger.name} <${payload.lodger.email}>`],
     ]);
     w.heading("Officers");

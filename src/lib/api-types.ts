@@ -36,7 +36,8 @@ export interface FilingView {
     status: CompanyStatus;
   };
   events: { id: string; status: FilingStatus; message: string; createdAt: string }[];
-  documents: { id: string; type: DocumentType; title: string; source: string }[];
+  /** templateReviewed: null for documents not made from a legal template. */
+  documents: { id: string; type: DocumentType; title: string; source: string; templateReviewed: boolean | null }[];
   payment: { status: "PENDING" | "PAID" | "EXPIRED" | "REFUNDED"; amount: number; currency: string } | null;
   /** True once the post-approval document pack has been generated. */
   packReady: boolean;

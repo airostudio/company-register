@@ -115,6 +115,11 @@ export function CompanyPanel({ company, filing }: { company: DashboardCompany; f
                           <span className="ml-2 text-xs text-muted-foreground">
                             {DOCUMENT_TYPE_LABELS[doc.type]} · PDF {formatBytes(doc.sizeBytes)}
                           </span>
+                          {doc.templateReviewed === false && (
+                            <Badge variant="warning" className="ml-2" title="This document comes from a template that hasn't yet been approved by a lawyer.">
+                              Draft — pending legal review
+                            </Badge>
+                          )}
                         </span>
                         <span className="flex gap-1">
                           <Button asChild variant="ghost" size="sm">

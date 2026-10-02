@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { CreditCard, LayoutDashboard, Loader2, Lock, RotateCcw, XCircle } from "lucide-react";
 import type { ApiErrorBody, CreateFormationResponse } from "@/lib/api-types";
 import { composeCompanyName, getJurisdiction } from "@/lib/jurisdictions";
@@ -26,6 +27,7 @@ export function CheckoutStep() {
   const { draft, phase, submission, submitError } = useWizardStore();
   const [issues, setIssues] = useState<Issue[]>([]);
   const [errorCode, setErrorCode] = useState<string>();
+  const router = useRouter();
   const returnState = useCheckoutReturn();
 
   if (phase === "submitted" && submission) {
@@ -103,6 +105,7 @@ export function CheckoutStep() {
         submission: { companyId: body.companyId, filingId: body.filingId, submittedAt: new Date().toISOString() },
       });
       if (body.checkoutUrl) window.location.assign(body.checkoutUrl);
+      else router.refresh(); // checkout signed the customer in — refresh server-rendered UI (header)
     } catch {
       dispatch({ type: "SUBMIT_FAILED", error: "Network error — check your connection and try again." });
     }

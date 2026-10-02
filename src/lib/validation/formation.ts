@@ -16,6 +16,8 @@ import {
   getEntityProfile,
   getJurisdiction,
   isEntityTypeAvailable,
+  meetsOwnershipThreshold,
+  ownershipThresholdLabel,
 } from "@/lib/jurisdictions";
 import { COMPANY_NAME_CHARS, LEGAL_ENDING_REGEX, normalizeCompanyName } from "@/lib/names";
 import { ADD_ONS, ADD_ON_IDS, isAddOnAvailable } from "@/lib/pricing/catalog";
@@ -95,8 +97,16 @@ export function createDetailsStepSchema(jurisdiction: Jurisdiction) {
         .min(10, "Describe what the company will do (at least 10 characters)")
         .max(500, "Keep it under 500 characters"),
       sicCodes: z.array(z.string()).max(4, "Choose up to 4 SIC codes"),
+      /** UK (ECCTA 2023): an email address Companies House can contact (not published). */
+      registeredEmail: z.union([z.literal(""), z.email("Enter a valid email address")]).optional(),
+      /** UK (ECCTA 2023): subscribers confirm the company is being formed for a lawful purpose. */
+      lawfulPurposeConfirmed: z.boolean().optional(),
     })
     .superRefine((v, ctx) => {
+      if (jurisdiction === "UK") {
+        if (!v.registeredEmail) addIssue(ctx, ["registeredEmail"], "Companies House requires a registered email address");
+        if (!v.lawfulPurposeConfirmed) addIssue(ctx, ["lawfulPurposeConfirmed"], "Confirm the company is being formed for a lawful purpose");
+      }
       if (!v.useAddressService) {
         checkAddress(ctx, v.registeredAddress, ["registeredAddress"], {
           requirePhysical: profile.address.requiresPhysicalAddress,
@@ -327,7 +337,7 @@ export function createPeopleStepSchema(
       });
       const declared = new Set(v.beneficialOwners.map((b) => b.fullName.trim().toLowerCase()));
       const significant = summary.holders.filter(
-        (h) => h.holderType === "INDIVIDUAL" && h.percent >= bo.thresholdPercent,
+        (h) => h.holderType === "INDIVIDUAL" && meetsOwnershipThreshold(jurisdiction, h.percent),
       );
       const missing = significant.filter((h) => !declared.has(h.name.trim().toLowerCase()));
       if (missing.length) {
@@ -338,7 +348,7 @@ export function createPeopleStepSchema(
         );
       }
       if (v.noBeneficialOwners && (v.beneficialOwners.length > 0 || significant.length > 0)) {
-        addIssue(ctx, ["noBeneficialOwners"], `You can't make this statement when someone meets the ${bo.thresholdPercent}% test`);
+        addIssue(ctx, ["noBeneficialOwners"], `You can't make this statement when someone holds ${ownershipThresholdLabel(jurisdiction)}`);
       }
       if (bo.required && v.beneficialOwners.length === 0 && !v.noBeneficialOwners) {
         addIssue(ctx, ["beneficialOwners"], `Add at least one ${bo.shortLabel}, or confirm the company has none`);

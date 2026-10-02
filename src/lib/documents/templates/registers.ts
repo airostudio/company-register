@@ -1,4 +1,4 @@
-import { OFFICER_ROLE_LABELS, SHARE_CLASS_LABELS } from "@/lib/domain";
+import { OFFICER_ROLE_LABELS, SHARE_CLASS_LABELS, type OfficerRole } from "@/lib/domain";
 import { getEntityProfile, getJurisdiction } from "@/lib/jurisdictions";
 import { formatAddress } from "@/lib/validation/address";
 import { formatDate, formatUnitPrice } from "@/lib/utils";
@@ -119,7 +119,14 @@ export function renderShareholderRegister(ctx: DocumentContext): Promise<Uint8Ar
   });
 }
 
-export function renderShareCertificate(ctx: DocumentContext, holderIndex: number): Promise<Uint8Array> {
+/** The operative wording of a share certificate (also fingerprinted for legal review). */
+export function shareCertificateWording(holder: DocumentContext["shareholders"][number], ctx: DocumentContext): string {
+  const j = getJurisdiction(ctx.company.jurisdiction);
+  const governing = ctx.company.jurisdiction === "UK" ? "articles of association" : ctx.company.jurisdiction === "AU" ? "constitution" : "bylaws";
+  return `This is to certify that ${holder.fullName} of ${formatAddress(holder.address)} is the registered holder of ${holder.units.toLocaleString("en")} fully paid ${SHARE_CLASS_LABELS[holder.shareClass].toLowerCase()} at an issue price of ${formatUnitPrice(holder.pricePerUnit, j.currency)} each, subject to the ${governing} of the company.`;
+}
+
+export function renderShareCertificate(ctx: DocumentContext, holderIndex: number, opts: { watermark?: string } = {}): Promise<Uint8Array> {
   const holder = ctx.shareholders[holderIndex];
   if (!holder) throw new Error(`No shareholder at index ${holderIndex}`);
   const j = getJurisdiction(ctx.company.jurisdiction);
@@ -127,7 +134,7 @@ export function renderShareCertificate(ctx: DocumentContext, holderIndex: number
   const directors = ctx.officers.filter((o) => o.roles.includes("DIRECTOR") || o.roles.includes("SECRETARY") || o.roles.includes("PRESIDENT"));
 
   return renderPdf(
-    { title: `${ctx.company.name} — Share Certificate No. ${certNo}`, footer: companyFooter(ctx), layout: "landscape" },
+    { title: `${ctx.company.name} — Share Certificate No. ${certNo}`, footer: companyFooter(ctx), layout: "landscape", watermark: opts.watermark },
     (w) => {
       const { doc } = w;
       const { width, height } = doc.page;
@@ -150,7 +157,7 @@ export function renderShareCertificate(ctx: DocumentContext, holderIndex: number
         .fontSize(13)
         .fillColor(theme.ink)
         .text(
-          `This is to certify that ${holder.fullName} of ${formatAddress(holder.address)} is the registered holder of ${holder.units.toLocaleString("en")} fully paid ${SHARE_CLASS_LABELS[holder.shareClass].toLowerCase()} at an issue price of ${formatUnitPrice(holder.pricePerUnit, j.currency)} each, subject to the ${ctx.company.jurisdiction === "UK" ? "articles of association" : ctx.company.jurisdiction === "AU" ? "constitution" : "bylaws"} of the company.`,
+          shareCertificateWording(holder, ctx),
           w.left + 40,
           doc.y,
           { width: w.contentWidth - 80, align: "center", lineGap: 4 },
@@ -181,19 +188,39 @@ export interface ConsentSignature {
   requestId: string;
 }
 
-export function consentLaw(jurisdiction: DocumentContext["company"]["jurisdiction"]): string {
-  return jurisdiction === "AU"
-    ? "section 201D of the Corporations Act 2001 (Cth)"
-    : jurisdiction === "UK"
-      ? "section 12 of the Companies Act 2006"
-      : "the laws of the State of incorporation";
+export function consentLaw(company: Pick<DocumentContext["company"], "jurisdiction" | "entityType">): string {
+  const llc = company.entityType === "US_LLC";
+  switch (company.jurisdiction) {
+    case "AU":
+      return "section 201D of the Corporations Act 2001 (Cth)";
+    case "UK":
+      return "section 12 of the Companies Act 2006";
+    case "US_DE":
+      return llc ? "the Delaware Limited Liability Company Act" : "the General Corporation Law of the State of Delaware";
+    case "US_WY":
+      return llc ? "the Wyoming Limited Liability Company Act" : "the Wyoming Business Corporation Act";
+  }
+}
+
+/** Role names as they read inside a sentence ("director and president"). */
+const ROLE_PHRASES: Record<OfficerRole, string> = {
+  DIRECTOR: "director",
+  SECRETARY: "secretary",
+  MANAGER: "manager",
+  PRESIDENT: "president",
+  TREASURER: "treasurer",
+  ORGANIZER: "organizer",
+};
+
+export function rolePhrase(roles: OfficerRole[]): string {
+  const words = roles.map((r) => ROLE_PHRASES[r]);
+  return words.length <= 1 ? (words[0] ?? "") : `${words.slice(0, -1).join(", ")} and ${words.at(-1)}`;
 }
 
 /** The consent wording shown on the signing page and in the PDF (kept in one place so they can't diverge). */
 export function consentStatements(officer: DocumentContext["officers"][number], ctx: DocumentContext): string[] {
-  const roles = officer.roles.map((r) => OFFICER_ROLE_LABELS[r]).join(" and ");
   return [
-    `I, ${officer.fullName}, consent to act as ${roles.toLowerCase()} of ${ctx.company.name} in accordance with ${consentLaw(ctx.company.jurisdiction)}, with effect from the date of the company's registration.`,
+    `I, ${officer.fullName}, consent to act as ${rolePhrase(officer.roles)} of ${ctx.company.name} in accordance with ${consentLaw(ctx.company)}, with effect from the date of the company's registration.`,
     "I confirm that I am not disqualified from managing a company, that the details above are correct, and that I understand the duties and responsibilities of the office.",
   ];
 }
@@ -203,13 +230,16 @@ export function consentStatements(officer: DocumentContext["officers"][number], 
  * `officerIndex` is set. With `signature`, the page carries the electronic
  * signature and an audit-trail page is appended.
  */
-export function renderConsentsToAct(ctx: DocumentContext, opts: { officerIndex?: number; signature?: ConsentSignature } = {}): Promise<Uint8Array> {
+export function renderConsentsToAct(
+  ctx: DocumentContext,
+  opts: { officerIndex?: number; signature?: ConsentSignature; watermark?: string } = {},
+): Promise<Uint8Array> {
   const j = getJurisdiction(ctx.company.jurisdiction);
   const officers = opts.officerIndex === undefined ? ctx.officers : [ctx.officers[opts.officerIndex]!];
   const sig = opts.signature;
   const title = officers.length === 1 ? `${ctx.company.name} — Consent to Act — ${officers[0]!.fullName}` : `${ctx.company.name} — Consents to Act`;
 
-  return renderPdf({ title, footer: companyFooter(ctx) }, (w) => {
+  return renderPdf({ title, footer: companyFooter(ctx), watermark: opts.watermark }, (w) => {
     officers.forEach((officer, i) => {
       if (i > 0) w.doc.addPage();
       const roles = officer.roles.map((r) => OFFICER_ROLE_LABELS[r]).join(" and ");

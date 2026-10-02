@@ -45,3 +45,15 @@ export function isEntityTypeAvailable(jurisdiction: Jurisdiction, entityType: En
 export function composeCompanyName(baseName: string, suffix: string): string {
   return `${baseName.trim().replace(/\s+/g, " ")} ${suffix}`.trim();
 }
+
+/** Whether a holding meets the jurisdiction's beneficial-ownership / PSC test. */
+export function meetsOwnershipThreshold(jurisdiction: Jurisdiction, percent: number): boolean {
+  const { thresholdPercent, thresholdInclusive } = getJurisdiction(jurisdiction).people.beneficialOwnership;
+  return thresholdInclusive ? percent >= thresholdPercent : percent > thresholdPercent;
+}
+
+/** "25%+" or "more than 25%". */
+export function ownershipThresholdLabel(jurisdiction: Jurisdiction): string {
+  const { thresholdPercent, thresholdInclusive } = getJurisdiction(jurisdiction).people.beneficialOwnership;
+  return thresholdInclusive ? `${thresholdPercent}% or more` : `more than ${thresholdPercent}%`;
+}

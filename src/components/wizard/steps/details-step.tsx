@@ -16,6 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { AddressFields } from "../address-fields";
 import { HelpTip } from "../help-tip";
@@ -222,6 +223,46 @@ export function DetailsStep() {
                 </FormItem>
               )}
             />
+          )}
+
+          {jurisdiction === "UK" && (
+            <section className="space-y-3">
+              <FormField
+                control={form.control}
+                name="registeredEmail"
+                render={({ field }) => (
+                  <FormItem>
+                    <div className="flex items-center justify-between">
+                      <FormLabel>Registered email address</FormLabel>
+                      <HelpTip topic="registeredEmail" jurisdiction="UK" />
+                    </div>
+                    <FormControl>
+                      <Input type="email" autoComplete="email" placeholder="company@yourdomain.com" {...field} value={field.value ?? ""} />
+                    </FormControl>
+                    <FormDescription>Not shown on the public register.</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="lawfulPurposeConfirmed"
+                render={({ field }) => (
+                  <FormItem className="flex items-start gap-2 space-y-0">
+                    <FormControl>
+                      <Checkbox className="mt-0.5" checked={field.value === true} onCheckedChange={(v) => field.onChange(v === true)} />
+                    </FormControl>
+                    <div className="space-y-1">
+                      <FormLabel className="leading-snug font-normal">
+                        The company is being formed for a lawful purpose, and its intended future activities are lawful.
+                      </FormLabel>
+                      <HelpTip topic="lawfulPurpose" jurisdiction="UK" />
+                      <FormMessage />
+                    </div>
+                  </FormItem>
+                )}
+              />
+            </section>
           )}
 
           {useService && (

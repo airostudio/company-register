@@ -83,8 +83,10 @@ export interface PeopleRules {
   beneficialOwnership: {
     label: string;
     shortLabel: string;
-    /** Individuals holding at least this % must be declared. */
+    /** Individuals holding this % must be declared… */
     thresholdPercent: number;
+    /** …"at least" (US BOI, AU) or "more than" (UK PSC: more than 25%). */
+    thresholdInclusive: boolean;
     required: boolean;
     natureOfControlOptions: { value: string; label: string }[];
   };

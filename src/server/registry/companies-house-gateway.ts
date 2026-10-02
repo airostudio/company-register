@@ -151,7 +151,17 @@ export function missingForElectronicFiling(payload: FormationPayload): string[] 
   return missing;
 }
 
-export function incorporationBody(payload: FormationPayload, config: GatewayConfig, submissionNumber: string, today = new Date()): string {
+/**
+ * @param articlesPdf our bespoke articles (they amend the model articles), attached
+ *   to the submission. Validate the attachment element names against the XSD.
+ */
+export function incorporationBody(
+  payload: FormationPayload,
+  config: GatewayConfig,
+  submissionNumber: string,
+  today = new Date(),
+  articlesPdf?: Uint8Array,
+): string {
   const office = payload.registeredOffice;
   const shares = payload.shareholders;
   const classes = [...new Set(shares.map((s) => s.shareClass))];
@@ -175,8 +185,10 @@ export function incorporationBody(payload: FormationPayload, config: GatewayConf
       el("CompanyType", "BYSHR"),
       el("CountryOfIncorporation", COUNTRY_OF_INCORPORATION[office.region] ?? "EW"),
       el("RegisteredOfficeAddress", [address(office)]),
+      el("RegisteredEmailAddress", payload.registeredEmail),
+      el("LawfulPurposeStatement", payload.lawfulPurposeStatement ? "true" : undefined),
       el("DataMemorandum", "true"),
-      el("Articles", "MODEL"),
+      el("Articles", articlesPdf ? "BESPOKE" : "MODEL"),
       el("RestrictedArticles", "false"),
       ...payload.officers.flatMap((o) =>
         o.roles
@@ -262,6 +274,15 @@ export function incorporationBody(payload: FormationPayload, config: GatewayConf
       ]),
       el("DateSigned", today.toISOString().slice(0, 10)),
       `<Form>${form}</Form>`,
+      articlesPdf
+        ? el("Document", [
+            el("Data", Buffer.from(articlesPdf).toString("base64")),
+            el("Date", today.toISOString().slice(0, 10)),
+            el("Filename", "articles-of-association.pdf"),
+            el("ContentType", "application/pdf"),
+            el("Category", "MEMARTS"),
+          ])
+        : undefined,
     ],
     { xmlns: "http://xmlgw.companieshouse.gov.uk/Header" },
   );

@@ -155,7 +155,21 @@ describe("people step", () => {
     app.people.beneficialOwners = [];
     app.people.noBeneficialOwners = true;
     const m = messages(createPeopleStepSchema("UK", "UK_LTD", { today }).safeParse(app.people));
-    expect(m).toContain("You can't make this statement when someone meets the 25% test");
+    expect(m).toContain("You can't make this statement when someone holds more than 25%");
+  });
+
+  it("uses 'more than 25%' for UK PSCs but '25% or more' elsewhere", () => {
+    const uk = buildApplication("UK", "UK_LTD");
+    uk.people.shareholders[0]!.units = 75;
+    uk.people.shareholders[1]!.units = 25; // exactly 25% is not a PSC
+    uk.people.beneficialOwners = uk.people.beneficialOwners.slice(0, 1);
+    expect(messages(createPeopleStepSchema("UK", "UK_LTD", { today }).safeParse(uk.people))).toEqual([]);
+
+    const us = buildApplication("US_DE", "US_C_CORP");
+    us.people.shareholders[0]!.units = 7_500_000;
+    us.people.shareholders[1]!.units = 2_500_000; // exactly 25% is a beneficial owner
+    us.people.beneficialOwners = us.people.beneficialOwners.slice(0, 1);
+    expect(messages(createPeopleStepSchema("US_DE", "US_C_CORP", { today }).safeParse(us.people))).toContain("Sam Partner (25%) must be declared as a beneficial owner");
   });
 });
 

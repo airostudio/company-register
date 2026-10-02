@@ -75,6 +75,7 @@ export const unitedKingdom: JurisdictionProfile = {
       label: "Persons with Significant Control (PSC)",
       shortLabel: "PSC",
       thresholdPercent: 25,
+      thresholdInclusive: false, // Companies Act 2006 Sch 1A: "more than 25%"
       required: true,
       natureOfControlOptions: [
         { value: "OWNERSHIP_OF_SHARES_25_TO_50", label: "Owns more than 25% but not more than 50% of shares" },
@@ -112,6 +113,14 @@ export const unitedKingdom: JurisdictionProfile = {
     psc: {
       title: "What is a PSC?",
       body: "A Person with Significant Control is anyone who owns more than 25% of shares or voting rights, can appoint the board, or otherwise controls the company. Companies House publishes the PSC register.",
+    },
+    registeredEmail: {
+      title: "Registered email address",
+      body: "Since March 2024 every company must give Companies House an 'appropriate' email address — one where emails would come to the attention of someone acting for the company. It isn't shown on the public register.",
+    },
+    lawfulPurpose: {
+      title: "Lawful purpose statement",
+      body: "When forming a company, the subscribers must confirm it is being formed for a lawful purpose (Economic Crime and Corporate Transparency Act 2023).",
     },
     personalCode: {
       title: "Companies House personal code",

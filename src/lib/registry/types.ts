@@ -20,6 +20,9 @@ export interface FormationPayload {
   principalPlaceOfBusiness?: Address;
   businessActivity: string;
   sicCodes: string[];
+  /** UK only (ECCTA 2023). */
+  registeredEmail?: string;
+  lawfulPurposeStatement?: boolean;
   officers: {
     fullName: string;
     roles: OfficerRole[];

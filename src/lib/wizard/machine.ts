@@ -176,6 +176,8 @@ export function defaultDetailsStep(jurisdiction: Jurisdiction): DetailsStep {
     principalAddress: emptyAddress(iso),
     businessActivity: "",
     sicCodes: [],
+    registeredEmail: "",
+    lawfulPurposeConfirmed: false,
   };
 }
 

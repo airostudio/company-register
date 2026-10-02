@@ -69,6 +69,8 @@ export function buildApplication(
       principalAddress: undefined,
       businessActivity: "Designing and selling warehouse automation robots",
       sicCodes: jurisdiction === "UK" ? ["62012"] : [],
+      registeredEmail: jurisdiction === "UK" ? "company@example.com" : "",
+      lawfulPurposeConfirmed: jurisdiction === "UK",
     },
     people: {
       officers: [officer({ id: "off_1", roles, residentialAddress: RESIDENCE[jurisdiction] })],

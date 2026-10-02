@@ -400,6 +400,11 @@ model Document {
   sizeBytes   Int?
   checksum    String?      // sha256
   source      String       @default("GENERATED") // GENERATED | REGISTRY | UPLOADED
+  // Provenance of documents generated from legal templates (see TemplateReview).
+  templateId          String?
+  templateVersion     String?
+  templateFingerprint String?
+  templateReviewed    Boolean?
   createdAt   DateTime     @default(now())
 
   @@index([companyId, type])
@@ -532,4 +537,32 @@ model RateLimitBucket {
 
   @@id([key, windowStart])
   @@index([expiresAt])
+}
+
+// ─── Legal template review ──────────────────────────────────────────────────
+
+enum TemplateReviewStatus {
+  APPROVED
+  CHANGES_REQUESTED
+}
+
+// A qualified lawyer's sign-off on one template's exact wording (fingerprint).
+// Recorded by ops staff from the lawyer's written advice; the advice itself
+// should be kept in the firm's records (adviceReference).
+model TemplateReview {
+  id                String               @id @default(cuid())
+  templateId        String
+  templateVersion   String
+  fingerprint       String
+  status            TemplateReviewStatus
+  reviewerName      String
+  reviewerFirm      String
+  reviewerAdmission String               // e.g. "Solicitor, NSW — practising certificate 12345"
+  adviceReference   String?              // Letter/memo reference
+  notes             String?
+  recordedById      String
+  reviewedAt        DateTime
+  createdAt         DateTime             @default(now())
+
+  @@index([templateId, fingerprint])
 }

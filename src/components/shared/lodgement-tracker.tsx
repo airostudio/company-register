@@ -60,7 +60,8 @@ export function LodgementTracker({ filingId, initial, compact }: { filingId: str
   const stageIndex = LIFECYCLE_STAGES.indexOf(stage);
   const failed = view.status === "REJECTED" || view.status === "FAILED";
   const needsAction = view.status === "REQUIRES_ACTION";
-  const inFlight = !view.settled && view.status !== "DRAFT"; // DRAFT waits on payment, not the registry
+  // DRAFT waits on payment and AWAITING_SIGNATURES on officers — not on the registry.
+  const inFlight = !view.settled && view.status !== "DRAFT" && view.status !== "AWAITING_SIGNATURES";
 
   return (
     <div className="space-y-5">

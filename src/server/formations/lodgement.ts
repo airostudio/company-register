@@ -188,7 +188,11 @@ export async function fulfilApprovedFiling(filingId: string): Promise<{ document
   if (!filing.documents.some((d) => d.source === "GENERATED")) {
     // Officers' e-signed consents replace the unsigned consent form in the pack.
     const signedConsents = filing.documents.some((d) => d.source === "SIGNED" && d.type === "CONSENT_TO_ACT");
-    const pack = await generateDocumentPack(documentContextFromCompany(company), { exclude: signedConsents ? ["CONSENT_TO_ACT"] : [] });
+    const { packReviewOptions } = await import("../legal/templates");
+    const pack = await generateDocumentPack(documentContextFromCompany(company), {
+      exclude: signedConsents ? ["CONSENT_TO_ACT"] : [],
+      ...(await packReviewOptions()),
+    });
     for (const doc of pack) {
       const stored = await storage().put(documentKey(company.id, doc.fileName), doc.content);
       await prisma.document.create({
@@ -203,6 +207,10 @@ export async function fulfilApprovedFiling(filingId: string): Promise<{ document
           sizeBytes: stored.sizeBytes,
           checksum: stored.checksum,
           source: "GENERATED",
+          templateId: doc.template?.id,
+          templateVersion: doc.template?.version,
+          templateFingerprint: doc.template?.fingerprint,
+          templateReviewed: doc.template?.reviewed,
         },
       });
       documents++;

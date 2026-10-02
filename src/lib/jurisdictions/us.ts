@@ -22,6 +22,7 @@ const US_PEOPLE: PeopleRules = {
     label: "Beneficial owners (BOI)",
     shortLabel: "Beneficial owner",
     thresholdPercent: 25,
+    thresholdInclusive: true,
     required: false,
     natureOfControlOptions: [
       { value: "OWNERSHIP_25", label: "Owns or controls 25%+ of ownership interests" },
@@ -59,7 +60,7 @@ const US_HELP = {
   },
   beneficialOwner: {
     title: "Beneficial ownership (BOI)",
-    body: "Individuals who own 25%+ or exercise substantial control may need to be reported to FinCEN depending on current federal rules. We collect this now so filings can be made if required.",
+    body: "Since FinCEN's March 2025 interim final rule, companies formed in the US are exempt from federal BOI reporting (only foreign companies registered to do business in the US must report). We still record owners of 25% or more for banking (KYC) and in case the rules change.",
   },
   nonResident: {
     title: "Non-US founders",

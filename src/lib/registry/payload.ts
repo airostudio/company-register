@@ -39,6 +39,8 @@ export function buildFormationPayload(app: FormationApplication, clientReference
     principalPlaceOfBusiness: principal,
     businessActivity: details.businessActivity,
     sicCodes: profile.requiresSicCodes ? details.sicCodes : [],
+    registeredEmail: jurisdiction === "UK" ? details.registeredEmail || undefined : undefined,
+    lawfulPurposeStatement: jurisdiction === "UK" ? details.lawfulPurposeConfirmed === true : undefined,
     officers: people.officers.map((o) => ({
       fullName: o.fullName.trim(),
       roles: o.roles,

@@ -9,6 +9,8 @@ import {
   type NameCheckOptions,
   type OfficialDocument,
 } from "@/lib/registry/types";
+import { documentContextFromPayload } from "@/lib/documents/context";
+import { renderGoverningDocument } from "@/lib/documents/templates/governing";
 import { AssistedLodgementAdapter } from "./assisted";
 import {
   GatewayError,
@@ -61,8 +63,14 @@ export class CompaniesHouseLiveAdapter implements IGovernmentRegistryAdapter {
       return this.assisted.submitFiling(payload);
     }
     const submissionNumber = newSubmissionNumber();
+    // Our articles amend the model articles, so they're filed as bespoke articles.
+    const articles = await renderGoverningDocument("ARTICLES_OF_ASSOCIATION", documentContextFromPayload(payload));
     try {
-      await send(this.gateway, envelope(this.gateway, "CompanyIncorporation", incorporationBody(payload, this.gateway, submissionNumber)), this.fetchImpl);
+      await send(
+        this.gateway,
+        envelope(this.gateway, "CompanyIncorporation", incorporationBody(payload, this.gateway, submissionNumber, new Date(), articles)),
+        this.fetchImpl,
+      );
     } catch (error) {
       throw this.toRegistryError(error);
     }

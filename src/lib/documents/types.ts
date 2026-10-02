@@ -41,6 +41,8 @@ export interface DocumentContext {
 }
 
 export interface GeneratedDocument {
+  /** Which legal template (and wording fingerprint) produced this document, if any. */
+  template?: { id: string; version: string; fingerprint: string; reviewed: boolean };
   type: DocumentType;
   title: string;
   fileName: string;

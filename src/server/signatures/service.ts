@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import type { SignatureRequest, User } from "@prisma/client";
-import { renderConsentsToAct } from "@/lib/documents";
-import { OFFICER_ROLE_LABELS, type OfficerRole } from "@/lib/domain";
+import { renderConsentsToAct, reviewState, rolePhrase } from "@/lib/documents";
+import type { OfficerRole } from "@/lib/domain";
 import { db } from "../db";
 import { documentContextFromCompany } from "../documents";
 import { sendEmail } from "../email";
@@ -9,6 +9,7 @@ import { layout } from "../email/templates";
 import { AppError } from "../errors";
 import { notifyCustomer, transition } from "../formations/lodgement";
 import { dispatchFilingLodgement } from "../jobs/dispatch";
+import { packReviewOptions } from "../legal/templates";
 import { hashToken, newToken } from "../session";
 import { documentKey, storage } from "../storage";
 import { appUrl } from "../urls";
@@ -41,11 +42,12 @@ export async function requestSignatures(filingId: string): Promise<SignatureRequ
 
   const company = await loadCompany(filing.companyId);
   const ctx = documentContextFromCompany(company);
+  const review = reviewState("CONSENT_TO_ACT", ctx, await packReviewOptions());
   const officers = company.officers.filter((o) => !o.ceasedAt);
   const created: SignatureRequest[] = [];
   for (const [index, officer] of officers.entries()) {
     if (!officer.email) throw new AppError(422, "SIGNER_EMAIL_MISSING", `${officer.fullName} has no email address to sign with`);
-    const pdf = await renderConsentsToAct(ctx, { officerIndex: index });
+    const pdf = await renderConsentsToAct(ctx, { officerIndex: index, watermark: review.watermark });
     const stored = await storage().put(documentKey(company.id, `consent-to-act-${officer.id}.pdf`), pdf);
     const token = newToken();
     const request = await prisma.signatureRequest.create({
@@ -69,7 +71,7 @@ export async function requestSignatures(filingId: string): Promise<SignatureRequ
 }
 
 async function emailSigner(request: SignatureRequest, companyName: string, requestedBy: string, token: string) {
-  const roles = (request.roles as OfficerRole[]).map((r) => OFFICER_ROLE_LABELS[r].toLowerCase()).join(" and ");
+  const roles = rolePhrase(request.roles as OfficerRole[]);
   await sendEmail({
     to: request.signerEmail,
     category: "signature",
@@ -123,8 +125,10 @@ export async function signConsent(request: SignatureRequest, input: SignInput): 
   const company = await loadCompany(request.companyId);
   const ctx = documentContextFromCompany(company);
   const index = company.officers.filter((o) => !o.ceasedAt).findIndex((o) => o.id === request.officerId);
+  const review = reviewState("CONSENT_TO_ACT", ctx, await packReviewOptions());
   const pdf = await renderConsentsToAct(ctx, {
     officerIndex: Math.max(index, 0),
+    watermark: review.watermark,
     signature: {
       signedName: input.typedName.trim(),
       signedAt: signedAt.toISOString(),
@@ -148,6 +152,10 @@ export async function signConsent(request: SignatureRequest, input: SignInput): 
       sizeBytes: stored.sizeBytes,
       checksum: stored.checksum,
       source: "SIGNED",
+      templateId: review.template?.id,
+      templateVersion: review.template?.version,
+      templateFingerprint: review.template?.fingerprint,
+      templateReviewed: review.template?.reviewed,
     },
   });
   await prisma.signatureRequest.update({ where: { id: request.id }, data: { signedDocumentId: doc.id } });

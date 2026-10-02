@@ -12,7 +12,7 @@ export async function getFilingView(filingId: string, ownerId: string): Promise<
       order: true,
       signatures: { orderBy: { createdAt: "asc" } },
       events: { orderBy: { createdAt: "asc" } },
-      documents: { orderBy: { createdAt: "asc" }, select: { id: true, type: true, title: true, source: true } },
+      documents: { orderBy: { createdAt: "asc" }, select: { id: true, type: true, title: true, source: true, templateReviewed: true } },
     },
   });
   if (!filing) return null;

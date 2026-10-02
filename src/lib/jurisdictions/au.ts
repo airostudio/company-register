@@ -85,6 +85,7 @@ export const australia: JurisdictionProfile = {
       label: "Beneficial owners",
       shortLabel: "Beneficial owner",
       thresholdPercent: 25,
+      thresholdInclusive: true,
       required: false,
       natureOfControlOptions: [
         { value: "SHARES_HELD_ON_TRUST", label: "Holds shares on trust for this person" },
